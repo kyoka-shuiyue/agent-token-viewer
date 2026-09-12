@@ -17,5 +17,7 @@
     "token-usage", "llm-usage", "claude-code", "codex", "opencode", "proma",
     "deepseek-harness", "zcode", "pi-agent", "observability", "local-first", "zero-dependency"
   ],
-  "repository": { "type": "git", "url": "https://github.com/<your-name>/agent-token-viewer.git" }
+  "repository": { "type": "git", "url": "git+https://github.com/kyoka-shuiyue/agent-token-viewer.git" },
+  "bugs": { "url": "https://github.com/kyoka-shuiyue/agent-token-viewer/issues" },
+  "homepage": "https://github.com/kyoka-shuiyue/agent-token-viewer#readme"
 }
