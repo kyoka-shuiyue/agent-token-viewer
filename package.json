@@ -1,0 +1,21 @@
+{
+  "name": "agent-token-viewer",
+  "version": "1.0.0",
+  "description": "Local-first token usage viewer for AI coding agents — Proma, Pi, oh-my-Pi, Claude Code, Claude Desktop, Codex, ZCode, DeepSeek Harness, OpenCode. Zero dependencies.",
+  "license": "MIT",
+  "private": false,
+  "type": "commonjs",
+  "bin": { "agent-token-viewer": "./server.js" },
+  "scripts": {
+    "start": "node server.js",
+    "scan": "node server.js --once",
+    "doctor": "node server.js --doctor"
+  },
+  "engines": { "node": ">=22.15" },
+  "os": [ "darwin", "linux", "win32" ],
+  "keywords": [
+    "token-usage", "llm-usage", "claude-code", "codex", "opencode", "proma",
+    "deepseek-harness", "zcode", "pi-agent", "observability", "local-first", "zero-dependency"
+  ],
+  "repository": { "type": "git", "url": "https://github.com/<your-name>/agent-token-viewer.git" }
+}
