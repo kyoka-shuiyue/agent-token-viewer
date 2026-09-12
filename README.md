@@ -23,6 +23,7 @@
 - [二、详细功能](#二详细功能)
 - [三、具体用途](#三具体用途)
 - [四、详细的动效展示](#四详细的动效展示)
+- [已实测验证](#已实测验证)
 - [支持的数据源](#支持的数据源)
 - [统计口径与防重复计数](#统计口径与防重复计数)
 - [隐私](#隐私)
@@ -55,16 +56,31 @@ node -v          # 需要 v22.15 以上
 ### 方式 A：下载压缩包跑起来（最快，30 秒）
 
 ```bash
-# 1) 下载并解压
+# 1) 下载
 curl -L -o atv.zip https://github.com/kyoka-shuiyue/agent-token-viewer/archive/refs/heads/main.zip
-tar -xf atv.zip          # Windows 可直接右键「全部提取」
-cd agent-token-viewer-main
 
-# 2) 启动
+# 2) 解压——三选一，取决于你在哪个环境里
+tar -xf atv.zip                  # Windows PowerShell / cmd、macOS 自带可用；
+                                 # 注意：Git Bash 自带的是 GNU tar，认不了 zip
+cd agent-token-viewer-main
+```
+
+在 **Git Bash** 或 **Linux** 里请改用：
+
+```bash
+unzip atv.zip && cd agent-token-viewer-main      # Git for Windows 自带 unzip
+# 或者——不管什么环境都能用：
+python -m zipfile -e atv.zip . && cd agent-token-viewer-main
+```
+
+Windows 用户也可以直接对着 zip 文件右键「全部提取」。
+
+```bash
 node server.js
 ```
 
-浏览器会自动打开 <http://127.0.0.1:3457>。Windows 用户直接双击 `start.bat`，macOS / Linux 执行 `./start.sh` 效果相同。
+浏览器会自动打开 <http://127.0.0.1:3457>。Windows 用户直接双击 `start.bat`；
+macOS / Linux 用 `bash start.sh`（或先 `chmod +x start.sh` 再 `./start.sh`）。
 
 ### 方式 B：git clone
 
@@ -99,9 +115,19 @@ node server.js --doctor    # 自检：每个数据源的候选路径在不在、
 ### 常用参数
 
 ```bash
+# macOS / Linux / Git Bash
 TOKEN_VIEWER_PORT=3458 node server.js   # 换端口（默认 3457）
-node server.js --once                   # 只扫描一次并打印，不起服务
-node server.js --doctor                 # 数据源自检
+
+# Windows PowerShell
+$env:TOKEN_VIEWER_PORT="3458"; node server.js
+
+# Windows cmd
+set TOKEN_VIEWER_PORT=3458 && node server.js
+```
+
+```bash
+node server.js --once      # 只扫描一次并打印各源统计，不起服务
+node server.js --doctor    # 自检：每个数据源的候选路径是否存在、读到多少条
 ```
 
 ### 首次运行会发生什么
@@ -133,8 +159,16 @@ node server.js --once           # 合计有没有异常翻倍/暴跌
 | 源码 ZIP | `https://github.com/kyoka-shuiyue/agent-token-viewer/archive/refs/heads/main.zip` | 想直接解压跑 |
 | 源码 tar.gz | `https://github.com/kyoka-shuiyue/agent-token-viewer/archive/refs/heads/main.tar.gz` | Linux/macOS |
 | git clone | `git clone https://github.com/kyoka-shuiyue/agent-token-viewer.git` | 想跟版本、提 PR |
-| 指定 Release | `https://github.com/kyoka-shuiyue/agent-token-viewer/releases/latest/download/agent-token-viewer.zip` | 想要稳定版 |
-| 只取两个核心文件 | `curl -LO .../raw/main/server.js` 与 `.../raw/main/index.html`，放同一目录后 `node server.js` | 极简党 |
+| 指定 Release | `https://github.com/kyoka-shuiyue/agent-token-viewer/releases/latest/download/agent-token-viewer.zip` | 想要稳定版（解压后目录名 `agent-token-viewer-v1.0.0`） |
+| 只取两个核心文件 | 见下方「极简下载」 | 极简党 |
+
+**极简下载**（只要两个文件，放同一目录就能跑）：
+
+```bash
+curl -LO https://raw.githubusercontent.com/kyoka-shuiyue/agent-token-viewer/main/server.js
+curl -LO https://raw.githubusercontent.com/kyoka-shuiyue/agent-token-viewer/main/index.html
+node server.js
+```
 
 ### 国内网络加速
 
@@ -354,6 +388,28 @@ https://cdn.jsdelivr.net/gh/kyoka-shuiyue/agent-token-viewer@main/index.html
 - 右下角可逐项关闭：3D 倾斜 / 流光与光斑 / 数字滚动
 - 「全部减弱」一键把动画压到 0.001s 并冻结背景与光带
 - 系统级 `prefers-reduced-motion: reduce` 自动进入减弱模式
+
+---
+
+## 已实测验证
+
+下面这些都在真实环境跑通过（Windows + Git Bash，Node v22.22.3）：
+
+| 项 | 结果 |
+| --- | --- |
+| 下载 main.zip / main.tar.gz | HTTP 200 |
+| Release 资产 zip | HTTP 200，解压得 `agent-token-viewer-v1.0.0/` |
+| raw / jsDelivr / ghfast 镜像单文件 | HTTP 200 |
+| 解压后的副本跑 `node server.js --once` | 正常，9 源全部命中，5.3s |
+| 解压后的副本起服务 | `GET /` 200、`/api/status` 200（ready 9/9）、`/api/data` 200 |
+| `node --check server.js` | 通过 |
+| `bash -n start.sh` / 换行符 | 语法通过；全仓库 LF，无 CRLF 污染 |
+| 发布包内容 | 不含 `.scan-cache.json` 与 `pricing-config.json`（不泄露本地用量与私有定价） |
+
+两个坑已经写进上面的说明（不是 bug，是环境差异）：
+
+1. **Git Bash 里的 `tar` 认不了 zip**（它是 GNU tar），请用 `unzip` 或 `python -m zipfile`；Windows PowerShell / cmd 的 `tar.exe` 是 bsdtar，可以解 zip。
+2. **`TOKEN_VIEWER_PORT=xxx node ...` 是 POSIX 写法**，Windows cmd / PowerShell 要用各自的环境变量语法（上面已给三种）。
 
 ---
 
