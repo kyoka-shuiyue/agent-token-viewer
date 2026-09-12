@@ -1,11 +1,11 @@
 @echo off
 chcp 65001 >nul
-title Token Viewer - 通用 Agent Token 用量查看器
+title Agent Token Viewer - 本机 Agent Token 用量总览
 cd /d "%~dp0"
 
 echo.
 echo   ============================================================
-echo     Token Viewer - 通用 Agent Token 用量查看器
+echo     Agent Token Viewer - 本机 Agent Token 用量总览
 echo   ============================================================
 echo.
 echo   正在启动本地服务（http://127.0.0.1:3457）...
