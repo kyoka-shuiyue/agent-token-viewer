@@ -27,6 +27,7 @@ c  = 该请求已知的真实成本（美元，可选）
 | ZCode | `inputTokens` `outputTokens` `cacheReadTokens` `cacheWriteTokens` `totalTokens` | 输入**不含**缓存 | 无 | 直接对应 |
 | DeepSeek Harness | `inputTokens` `outputTokens` `cacheReadTokens` `totalTokens` | 输入**不含**缓存 | 无 | 实测 `total = i + o + cr`，缓存为独立项 |
 | OpenCode | `tokens.input` `tokens.output` `tokens.reasoning` `tokens.cache.read` `tokens.cache.write` `tokens.total` | 输入**不含**缓存 | 推理为**独立相加项** | `o = output + reasoning`，`r = reasoning`（`total = i+o+r+cr+cw`） |
+| Qoder | **无**（`usage` 四个 token 字段恒为 0） | — | `thinking` 已含在输出文本里 | 文本长度估算：`i` = 本轮新增 + 历史重发，`o` = 本轮输出，`cr = cw = 0` |
 
 ## 成本
 
@@ -46,6 +47,17 @@ c  = 该请求已知的真实成本（美元，可选）
 - 日/月桶按**本地时区**分桶（`dayKey`），与用户日历一致。
 - 无时间戳的记录会被丢弃（实测各源均为 0 条缺失）。
 
+## 哪些数字是估算的
+
+只有两个源不是直接拿官方上报的 token：
+
+| 源 | 估算方式 | 影响 |
+| --- | --- | --- |
+| Claude Code | 旧会话文件被自动清理后，改用 `stats-cache.json` 的按天总量，四类拆分按模型全局比例估算 | 总量准确，四类拆分是比例值 |
+| Qoder | 官方**不落 token**（`tokenCountsAvailable:false`），全部四类均为文本长度估算 | 总量与拆分都是估算；UI 卡片副标题与详情页 `⚠` 备注都会写明 |
+
+横向比较时请先把这两个源当成量级参考，不要当成账单数字。
+
 ## 去重与防重复计数（重要）
 
 | 场景 | 后果 | 处理 |
@@ -55,3 +67,6 @@ c  = 该请求已知的真实成本（美元，可选）
 | Codex 续聊重开文件并重放历史 | 严重翻倍 | 按 `session_id` 取累计量最大的文件，再对累计值做差分 |
 | DeepSeek Harness 的 `assistant/chunk` 回声 | 翻倍 | 只取 `assistant/message` |
 | Claude Desktop 账本 vs Claude Code 主目录同一会话 | 跨源重复 | 账本优先，被账本覆盖的 `cliSessionId` 从 Claude Code 中排除 |
+| Qoder 桌面 App 的 `main.sqlite` 与 CLI 的 `projects/` 共用同一批 session id | 翻倍 | App 库**只取会话标题**，不取用量 |
+| Qoder `logs/sessions/**` 与 `projects/` 是同一批请求 | 翻倍 | 只扫 `projects/` |
+| Qoder 流式中间块（`thinking` / `content_block_start`）无 `usage` | 偏大 | 只取带 `usage` 的 `assistant` 行，并按 `uuid` 去重 |

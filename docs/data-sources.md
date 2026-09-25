@@ -20,6 +20,7 @@
 | 7 | ZCode | `~/.zcode/cli/db/db.sqlite` 表 `model_usage` | SQLite | 独立列 | 已接入（transcript 作回退） |
 | 8 | DeepSeek Harness | `%APPDATA%/dsh-desktop/harness/sessions/**/session.jsonl.zstd`<br>`~/.dsh/sessions/**` | 多帧 zstd + JSONL | `assistant/message` → `data.usage` | 已接入 |
 | 9 | OpenCode | `~/.local/share/opencode/opencode.db`（+`opencode-local.db`）表 `message`/`session` | SQLite | `data.tokens` | 已接入 |
+| 10 | Qoder | `~/.qoder/projects/**/*.jsonl`（子代理在其 `subagents/` 下） | JSONL | **无 token 字段** → 按消息文本估算 | 已接入（估算口径） |
 
 ---
 
@@ -32,9 +33,14 @@
 - **时间**：`_createdAt`（毫秒）优先，回退 `timestamp`。
 - **模型**：`_channelModelId` 优先（渠道真实模型），回退 `message.model`。
 - **会话**：`session_id`；标题在 `~/.proma/agent-sessions.json` 的 `sessions` 里。
+  **但索引条目有两套 id**：`id`（Proma 内部 id，也等于会话文件名）与 `sdkSessionId`（SDK 会话 id）。
+  会话文件里的 `session_id` 是 **`sdkSessionId`**，按 `id` 建索引会一条也匹不上（实测 0/245）。
 - **坑**：
   - 同一轮会同时写 `type:"assistant"` 和 `type:"result"`，两者数值相同 → **只能取一种**，本项目取 `assistant` 并按 `uuid` 去重。
   - 缓存读/写**不在** `input_tokens` 内（Anthropic 口径），总量 = 四项相加。
+  - 部分会话的 `sdkSessionId` **没写回索引**，只能靠“文件名 = `id`”反查条目；
+    且**续聊/恢复会让一个文件出现多个 `session_id`**（本机实测某文件 1.4MB，第二个 id 出现在 18KB 之后），
+    所以必须全文收集，不能只读头部。本项目用正则 `"session_id"\s*:\s*"([^"]+)"` 扫，避开整行 `JSON.parse`。
 
 ## 2 / 3. Pi 与 oh-my-Pi
 
@@ -47,6 +53,7 @@
   - `totalTokens = input + output + cacheRead + cacheWrite`，`reasoning` **已含在 output 内**，不要再加。
   - 出错请求会写 `usage` 全 0 → 过滤掉。
   - 会话 id 在首行 `type:"session"` 的 `id`，**但行级预过滤会跳过它**，所以要用文件名兜底。
+  - **标题**：Pi 家族没有标题索引，取首条 `type:"message"` + `role:"user"` 的 `text` 作为标题（见下文「会话标题从哪来」）。
 
 ## 4. Claude Code（最容易漏的一个）
 
@@ -63,6 +70,9 @@
     文件记录只补 `stats-cache` 未覆盖的日期，避免重复计数。UI 会标注这一事实。
   - `stats-cache.json` 有 `lastComputedDate`，**它之后的数据要靠会话文件**；文件若已删则该段无法回补。
 - **坑**：`~/.claude/stats-cache.json` 的 `dailyActivity` 只有消息数没有 token，别用错表。
+- **标题**：本机版本的 Claude Code **不写 `type:"summary"` 行**，所以取首条真实用户输入当标题（排除 `tool_result` 回传）。
+  来自 `stats-cache.json` 的记录没有会话文件，统一归到一个名为
+  `Claude Code 官方按天统计（早期会话文件已清理）` 的桶，不暴露内部 id。
 
 ## 5. Claude Desktop
 
@@ -140,6 +150,48 @@
 
 ---
 
+## 10. Qoder（唯一需要估算的源）
+
+- **位置**：`~/.qoder/projects/<编码后的cwd>/<sessionId>.jsonl`，子代理会话在
+  `~/.qoder/projects/<编码后的cwd>/<sessionId>/subagents/*.jsonl`。可用 `QODER_HOME` 覆盖根目录。
+  格式是 **Claude Code 风格事件流**（`type` = `user` / `assistant` / `attachment` / `active-leaf` / `runtime-config` …）。
+- **关键事实：本地不落 token 数**。`type:"assistant"` 行的 `message.usage` 里
+  `input_tokens` / `output_tokens` / `cache_read_input_tokens` / `cache_creation_input_tokens` **恒为 0**，
+  但 `credits`（本机 2026-09-19 合计约 65，含子代理）与 `context_usage_ratio` 有真值。桌面 App 的
+  `chat_session_context_usage.snapshot_json` 里直接写着 `"tokenCountsAvailable": false`，
+  逐请求日志 `~/.qoder/logs/sessions/**/segments/*.jsonl` 的 `model.response.completed` 事件也是 0。
+  所以这个源是**文本长度估算**，不是官方口径。
+- **估算规则**（`qoderLineHandler`）：
+  - `o` = 本条 `message.content` 各部件（`text` / `thinking` / `tool_use.input` 的 JSON）的估算 token；
+  - `i` = 本条之前新增的 `user` / `attachment` 文本 + 之前累积的上下文（多轮会话每轮重发历史）；
+  - `cr` / `cw` 一律 0 —— Qoder 未上报缓存，不虚构命中率（详情页会显示“缓存命中率 0.0%”，这是事实）；
+  - 换算：CJK / 假名 / 韩文按 1 字 = 1 token，其余 4 字符 = 1 token（`estTokens`）。
+  - 校准依据：估算累计值与 Qoder 自己的 `context_usage_ratio` 在本机 544 个点上 log-log 相关系数 **0.94**。
+  - `context_usage_ratio` 相比上一轮**回落** → 视为发生过上下文压缩，按回落比例收缩累积值（否则压缩后会把已丢掉的历史当输入一直叠加）。
+- **会话标题**：只从 `chat_sessions` 取，**不取用量**（见下一个坑）；库不存在或 Node 不支持 `node:sqlite` 时，
+  回退到通用的 `sessionMetaFromFiles`（读文件头部 64KB，取 `cwd` 与首条 `user` 文本，结果进 `headMetaCache`）。
+- **坑（重要）**：
+  1. **App 与 CLI 是同一批 session id**。`%APPDATA%/com.qoder.app.stable/main.sqlite` 的 `chat_sessions.session_id`
+     与 `~/.qoder/projects/` 的文件名完全一致（App 只是 CLI 的前端壳）。两边都扫会重复计数，
+     所以 App 库**只用于取标题**。它的 `chat_session_messages` 只存交互层消息（voice transcript / system / 最终文本），
+     没有逐轮 `usage`，本来也不是用量源。
+  2. **行级预过滤不能写 `"role":"user"`**。`user` / `attachment` 行不含 `usage`，靠它们累积输入；
+     而紧凑写法在序列化带空格的版本上（`"role": "user"`）会漏匹配，导致 `i` 全部算成 0。
+     现用 `['usage', '"user"', '"attachment"']`。
+  3. **`~/.qoder-cli/ai-stats/`** 是代码采纳率统计（`aiAddedLines` / `aiDeletedLines` / `lineDetails`），
+     **不含 token**，不要当用量源。
+  4. **`~/.qoder/logs/`** 与 `projects/` 是同一批请求的两种记录，两处都扫会翻倍；且它也只有 0 值 token。
+  5. **`~/.qoder/.models/<uid>/catalog-v6`** 是加密的（拿不到 `contextWindow` 与模型价），
+     `runtime-config` 行的 `contextWindow` 也是 `null`（默认 auto）。
+  6. `credits` 不是美元，**不能**当作已知真实成本传给 `norm()` 的 `c` 字段。
+  7. 早期消息带 `[QODER_LIVE_VOICE_CONTEXT]` 前缀（语音会话的隐藏上下文），做标题时要跳过。
+- **计价**：`qfmodel` 不公开美元单价，`pricing-config.json` 里四个字段均为 `null`（未计价），
+  需用户按自己的 Qoder 套餐手填。
+- **本机实测（2026-09-19）**：12 文件 / 13.0 MB → 567 条记录、5 个会话、约 26.9M tokens（估算），
+  模型单一 `qfmodel`；其中 `o` 合计 11.7 万、`i` 合计 2680 万（多轮重发的历史占绝大头）。
+
+---
+
 ## 本机已发现但**未纳入**的来源（供后续扩展）
 
 | 位置 | 情况 |
@@ -150,6 +202,32 @@
 | `~/.cursor`、`~/.gemini`、`~/.trae-cn` | jsonl 里**没有 usage 字段**（Gemini/Cursor 用量不落本地） |
 | `~/.zcode/v2/tasks-index.sqlite` | 116 个 task 的索引，**无 token 列** |
 | `%APPDATA%/ai.opencode.desktop`、`%APPDATA%/ZCode` | Electron 壳数据（Cache/IndexedDB），用量不在这里 |
+| `~/.qoder/logs/sessions/**/segments/*.jsonl` | 25MB 结构化事件日志，`model.response.completed` 有四个 token 字段但**恒为 0**，且与 `projects/` 同一批请求 |
+| `~/.qoder-cli/ai-stats/projects/*/*.jsonl` | 代码采纳率统计（AI 增删行），无 token |
+| `%APPDATA%/com.qoder.app.stable/main.sqlite` 表 `chat_session_messages` | App 交互层消息，无 `usage`；只用于取 `chat_sessions.title` |
+
+## 会话标题从哪来（容易全部落空）
+
+UI 的会话清单靠 `sessions[会话id] = {title, cwd}`，各家来源不同：
+
+| 源 | 标题来源 | 匹配键 |
+| --- | --- | --- |
+| Proma | `agent-sessions.json` 的 `sessions[].title` | **`sdkSessionId`**（主）+ `id`（别名）+ 文件名反查 |
+| Claude Desktop | 账本自带 | 账本会话 id |
+| Codex | `~/.codex/session_index.jsonl` 的 `thread_name` | 会话 id（索引只覆盖部分会话） |
+| ZCode / OpenCode / DSH | 各自的库或事件流 | 会话 id |
+| Qoder | 桌面 App `chat_sessions.title`，回退首条用户输入 | 会话 id（App 与 CLI 共用） |
+| Claude Code / Pi / oh-my-Pi | **无索引** → 取首条真实用户输入 | 会话 id |
+
+实现上共用 `sessionMetaFromFiles(files, {sidOf, userTextOf, skip})`：只读文件头部 64KB，
+结果缓存在 `headMetaCache`（标题与 cwd 不会变）。注意三个陷阱：
+
+1. 匹配键必须与记录里的 `rec.s` 同一体系（Proma 就是在这上面踩过一次：两套 id 导致全部匹不上）。
+2. “首条用户输入”要排除工具回传（Claude Code / Qoder 的 `tool_result` 也挂在 `type:"user"` 上），
+   以及隐藏上下文前缀（Qoder 的 `[QODER_LIVE_VOICE_CONTEXT]`）。
+3. 一个文件可能对应多个会话 id（续聊/恢复），`sidOf` 允许返回数组。
+
+---
 
 ## 通用注意事项（做跨机器适配时先看这段）
 

@@ -214,6 +214,51 @@ svg.i{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.75;str
 .badge{font-size:10.5px;padding:3px 9px;border-radius:var(--r-pill);background:var(--paper-2);color:var(--ink-3);border:1px solid var(--line)}
 
 /* ============================================================
+   总览 · 模型排行
+   ============================================================ */
+.rank-head{margin-bottom:4px}
+.rank-note{font-size:11.5px;color:var(--ink-3);margin:-6px 0 10px;line-height:1.5}
+.rank-note b{color:var(--ink-2);font-weight:600;font-family:var(--font-num)}
+.mr-row{
+  display:grid;align-items:center;gap:0 12px;padding:11px 2px 12px;
+  grid-template-columns:26px minmax(0,1.35fr) minmax(72px,2.2fr) minmax(88px,auto);
+  grid-template-areas:"rank name bar val" ". comp comp comp" ". sub sub sub";
+  border-bottom:1px dashed var(--line);transition:background .25s;
+}
+.mr-row:last-child{border-bottom:0}
+.mr-row:hover{background:var(--paper)}
+.mr-rank{grid-area:rank;font-family:var(--font-num);font-variant-numeric:lining-nums tabular-nums;font-size:12.5px;color:var(--ink-3);text-align:center}
+.mr-row.top3 .mr-rank{color:var(--ember);font-weight:700}
+.mr-name{grid-area:name;min-width:0;display:flex;align-items:center;gap:7px}
+.mr-name .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;font-weight:600;color:var(--ink)}
+.mr-name .alias{
+  flex:none;font-size:10px;line-height:1;padding:3px 6px;border-radius:var(--r-pill);
+  background:var(--paper-2);border:1px solid var(--line);color:var(--ink-3);cursor:help;font-family:var(--font-num)
+}
+.mr-bar{grid-area:bar;position:relative;height:11px;border-radius:99px;background:var(--paper-2);overflow:hidden}
+.mr-bar i{
+  display:block;height:100%;border-radius:99px;
+  width:var(--w,0%);
+  /* 基准宽度就是目标值，动画只负责从 0 长出来：
+     这样在后台标签页里动画被暂停时，条形仍然正确显示（rAF+transition 会空留 0 宽）*/
+  animation:mrgrow 1.05s var(--ease)
+}
+@keyframes mrgrow{from{width:0}}
+.mr-val{grid-area:val;font-family:var(--font-num);font-variant-numeric:lining-nums tabular-nums;font-size:13px;color:var(--ink);white-space:nowrap;text-align:right}
+.mr-val em{font-style:normal;font-size:11px;color:var(--ink-3);margin-left:7px}
+.mr-comp{grid-area:comp;display:flex;height:4px;border-radius:99px;overflow:hidden;margin-top:8px;background:transparent}
+.mr-comp b{display:block;height:100%}
+.mr-sub{grid-area:sub;display:flex;flex-wrap:wrap;gap:4px 13px;margin-top:7px;font-size:11px;color:var(--ink-3);line-height:1.6}
+.mr-sub span{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.mr-sub b{color:var(--ink-2);font-weight:600;font-family:var(--font-num);font-variant-numeric:lining-nums tabular-nums}
+.mr-sub .sw{width:6px;height:6px;border-radius:50%;flex:none;background:currentColor}
+.mr-sub .adot{width:7px;height:7px;border-radius:2.5px;flex:none;background:currentColor}
+.mr-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:11.5px;color:var(--ink-3)}
+.mr-foot .link{color:var(--ember);cursor:pointer;font-weight:600}
+.mr-foot .link:hover{text-decoration:underline}
+.mr-empty{padding:28px 0;text-align:center;font-size:12.5px;color:var(--ink-3)}
+
+/* ============================================================
    图表
    ============================================================ */
 .donut-wrap{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
@@ -359,6 +404,8 @@ body.nofx .tilt{transform:none!important}
   .price-row{grid-template-columns:minmax(0,1fr) repeat(4,52px)}
   .tweaks{right:12px;bottom:12px}
   .big{font-size:clamp(44px,13vw,64px)}
+  .mr-row{grid-template-columns:22px minmax(0,1fr) auto;grid-template-areas:"rank name val" ". bar bar" ". comp comp" ". sub sub";row-gap:2px}
+  .mr-val{font-size:12.5px}
 }
 @media (prefers-reduced-motion:reduce){
   *{animation-duration:.001s!important;animation-delay:0s!important;transition-duration:.001s!important}
@@ -424,6 +471,20 @@ body.nofx .tilt{transform:none!important}
 
     <div class="section-title"><h2>各 Agent 明细</h2><span class="hint">点击卡片下钻单个 Agent</span></div>
     <div class="agents" id="agents"></div>
+
+    <div class="section-title"><h2>模型排行</h2><span class="hint">跟随顶部时间区间 · 同名 / 同 ID 的模型跨 Agent 合并累计</span></div>
+    <div class="card tilt reveal" id="rankCard">
+      <div class="card-head rank-head">
+        <h3>模型 Token 排行 Top 10 <span class="meta" id="rankRange"></span></h3>
+        <div class="seg" id="rankScale" title="等比条：长度严格正比于 token 量，头部模型会把尾部拑到很短；开方条：按平方根缩放，中小模型之间的高低更容易看出来，但长度不再正比于量">
+          <button data-k="linear" class="on">等比条</button><button data-k="sqrt">开方条</button>
+        </div>
+      </div>
+      <div class="rank-note" id="rankNote"></div>
+      <div id="modelRank"></div>
+      <div class="mr-foot" id="rankFoot" style="display:none"></div>
+    </div>
+
   </section>
 
   <section id="detail"></section>
@@ -516,8 +577,17 @@ const AGENT_COLORS = {
   zcode: '#5F86A0',
   dsh: '#7E8A3F',
   opencode: '#B98A5A',
+  qoder: '#96786A',
 };
 const colorOf = (a, i) => AGENT_COLORS[a.id] || a.color || PALETTE[(i || 0) % PALETTE.length];
+
+/* Token 类型的固定配色（环图 / 堆叠图 / 模型排行共用同一口径） */
+const TOKEN_TYPES = [
+  { key: 'i', label: '输入', color: '#D9541F' },
+  { key: 'o', label: '输出', color: '#C98A14' },
+  { key: 'cr', label: '缓存读', color: '#6F8265' },
+  { key: 'cw', label: '缓存写', color: '#5F86A0' },
+];
 
 const S = {
   data: null,
@@ -527,6 +597,8 @@ const S = {
   agent: null,
   detailMode: 'model',
   detailGran: 'auto',
+  rankScale: 'linear',   // 对比条刻度：linear = 等比，sqrt = 开方缩放
+  rankExpand: false,     // 模型排行是否展开全部
   fx: { tilt: true, glow: true, numbers: true, calm: false },
 };
 
@@ -577,9 +649,18 @@ function findPrice(model) {
   }
   return null;
 }
+/* 单价匹配结果缓存：每条记录都要算成本，未命中时的模糊匹配（排序 + 子串）代价并不便宜。
+   S.pricing 在载入 / 保存 / 刷新时都是整体替换，因此按对象身份失效就够安全。 */
+const _priceMemo = new Map();
+let _priceMemoSrc = null;
+function priceOf(model) {
+  if (_priceMemoSrc !== S.pricing) { _priceMemo.clear(); _priceMemoSrc = S.pricing; }
+  if (!_priceMemo.has(model)) _priceMemo.set(model, findPrice(model));
+  return _priceMemo.get(model);
+}
 function recCost(r) {
   if (r.c != null) return r.c;
-  const p = findPrice(r.m);
+  const p = priceOf(r.m);
   if (!p) return 0;
   return ((r.i * (p.input || 0)) + (r.o * (p.output || 0)) + (r.cr * (p.cacheRead || 0)) + (r.cw * (p.cacheCreation || 0))) / 1e6;
 }
@@ -909,7 +990,7 @@ async function bootSequence() {
   const all = Object.values(body.agents).flatMap((a) => a.records);
   const minT = all.length ? Math.min(...all.map((r) => r.t)) : Date.now();
   S.range = { key: 'all', from: 0, to: Number.MAX_SAFE_INTEGER };
-  $('#brandSub').textContent = `9 类 Agent · 数据自 ${new Date(minT).toLocaleDateString('zh-CN')}`;
+  $('#brandSub').textContent = `${Object.keys(body.agents).length} 类 Agent · 数据自 ${new Date(minT).toLocaleDateString('zh-CN')}`;
   setTimeout(() => { $('#boot').classList.add('gone'); render(); }, 240);
 }
 
@@ -1028,9 +1109,11 @@ function renderOverview() {
     `<div class="v" style="color:${t.c}">${t.v}</div>` +
     `<div class="m">${t.m}</div></div>`).join('');
 
+  renderModelRank();
   const host = $('#agents');
   host.innerHTML = '';
-  agents.slice().sort((a, b) => ((A.per[b.id] || {}).total || 0) - ((A.per[a.id] || {}).total || 0)).forEach((a, i) => {
+  const sorted = agents.slice().sort((a, b) => ((A.per[b.id] || {}).total || 0) - ((A.per[a.id] || {}).total || 0));
+  sorted.forEach((a, i) => {
     const t = A.per[a.id] || { total: 0, calls: 0, sessions: new Set(), daily: new Map(), cost: 0, cr: 0 };
     const color = colorOf(a, i);
     const empty = a.status === 'empty' || a.status === 'missing' || t.total === 0;
@@ -1058,6 +1141,8 @@ function renderOverview() {
     if (!empty && daily.length > 1) renderSpark(card.querySelector('[data-spark]'), daily, color);
     card.addEventListener('click', () => openAgent(a.id));
   });
+  // 排行卡已移到 Agent 卡片网格下方，入场序号跟着排在其后
+  $('#rankCard').style.setProperty('--i', String(sorted.length + 6));
 }
 
 function chip(label, val) {
@@ -1077,6 +1162,136 @@ function costChip(cost) {
   }
   return `<span class="chip cost" id="chipCost" title="点击设置模型单价"><span class="dot"></span>预估成本 <b>${money(cost)}</b>` +
     `<em>${unpriced ? `${unpriced} 个模型未计价 · 去设置` : '单价设置'}</em></span>`;
+}
+
+/* ============================================================
+   5.1 模型排行：跨 Agent 合并同名 / 同 ID 的模型
+   ============================================================ */
+
+// 只统计顶部选定的时间区间（区间为“全部时间”时就是全量历史）
+function aggModels() {
+  const map = new Map();
+  for (const a of visibleAgents()) {
+    for (const rec of a.records) {
+      if (!inRange(rec.t)) continue;
+      const key = normModel(rec.m) || 'unknown';
+      let m = map.get(key);
+      if (!m) {
+        m = {
+          key, total: 0, i: 0, o: 0, cr: 0, cw: 0, r: 0, calls: 0, cost: 0, priced: false,
+          names: new Map(), agents: new Map(), sessions: new Set(), min: Infinity, max: 0,
+        };
+        map.set(key, m);
+      }
+      const sum = rec.i + rec.o + rec.cr + rec.cw;
+      m.i += rec.i; m.o += rec.o; m.cr += rec.cr; m.cw += rec.cw; m.r += rec.r;
+      m.total += sum; m.calls++;
+      m.cost += recCost(rec);
+      if (!m.priced && (rec.c != null || priceOf(rec.m))) m.priced = true;
+      // 同一条模型在不同工具里写法不同（带供应商前缀、带 [] 备注、大小写不一）：
+      // 用 normModel 归一后归入同一个 key，各原始写法单独计数备查
+      m.names.set(rec.m, (m.names.get(rec.m) || 0) + 1);
+      m.agents.set(a.id, (m.agents.get(a.id) || 0) + sum);
+      if (rec.s) m.sessions.add(a.id + '|' + rec.s); // 会话 id 只在单 Agent 内唯一，拼上源 id 防碰撞
+      if (rec.t < m.min) m.min = rec.t;
+      if (rec.t > m.max) m.max = rec.t;
+    }
+  }
+  const out = [...map.values()].map((m) => {
+    // 展示名：不带 [] 备注的写法优先，写法本身等于归一 key 的再优先，
+    // 剩下的按出现次数取——排行看的是模型 ID，不是某个工具的个性化备注
+    const score = (n) => (/\[|\]/.test(n) ? 2 : 0) + (String(n).toLowerCase() === m.key ? 0 : 1);
+    const names = [...m.names.entries()].sort((x, y) =>
+      score(x[0]) - score(y[0]) || y[1] - x[1] || String(x[0]).length - String(y[0]).length);
+    m.name = names.length ? String(names[0][0]) : m.key;
+    m.aliases = names.slice(1);
+    m.agentList = [...m.agents.entries()].sort((x, y) => y[1] - x[1]).map(([id, v]) => {
+      const ag = S.data.agents[id] || { id };
+      return { name: ag.name || id, value: v, color: colorOf(ag, 0) };
+    });
+    return m;
+  });
+  out.sort((x, y) => y.total - x.total);
+  return out;
+}
+
+const dkey = (ts) => new Date(ts).toLocaleDateString('zh-CN');
+
+function renderModelRank() {
+  const host = $('#modelRank');
+  const note = $('#rankNote');
+  const foot = $('#rankFoot');
+  if (!host) return;
+  const rows = aggModels();
+  const grand = rows.reduce((s, r) => s + r.total, 0);
+  const label = rangeLabel();
+  $('#rankRange').textContent = '· ' + label;
+
+  if (!rows.length) {
+    host.innerHTML = `<div class="mr-empty">${esc(label)}内没有模型用量</div>`;
+    note.innerHTML = '';
+    foot.style.display = 'none';
+    return;
+  }
+
+  const max = Math.max(1, ...rows.map((r) => r.total));
+  // 条长换算：等比忠实反映量级；开方把差距压匀，方便看尾部模型的高低
+  const widthOf = (v) => {
+    if (v <= 0) return 0;
+    const w = S.rankScale === 'sqrt' ? Math.sqrt(v / max) * 100 : (v / max) * 100;
+    return Math.max(1.4, Math.min(100, w));
+  };
+
+  const list = S.rankExpand ? rows : rows.slice(0, 10);
+  const rest = rows.slice(10);
+  const shownSum = list.reduce((s, r) => s + r.total, 0);
+  // 刻度说明：避免读者把条长当成严格比例
+  const clamped = S.rankScale === 'linear' && list.some((m) => widthOf(m.total) > (m.total / max) * 100 + 0.01);
+  const scaleHint = S.rankScale === 'sqrt'
+    ? ' · 对比条为<b>开方刻度（√）</b>，长度不严格正比于 token 量'
+    : (clamped ? ' · 对比条<b>等比</b>，不足 1.4% 的按 1.4% 起画' : '');
+
+  note.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px">` +
+    `<span style="width:6px;height:6px;border-radius:50%;background:var(--sky);display:inline-block"></span>` +
+    `统计区间：<b>${esc(label)}</b>` +
+    `（跟顶部区间联动） · 共 <b>${exact(rows.length)}</b> 个模型 · 合计 <b>${fmt(grand)}</b> tokens${scaleHint}</span>`;
+
+  host.innerHTML = list.map((m, i) => {
+    const color = PALETTE[i % PALETTE.length];
+    const comp = TOKEN_TYPES.filter((t) => m[t.key] > 0);
+    const alias = m.aliases.length
+      ? `<span class="alias" title="同一个模型 ID 的不同写法已合并计入：${esc(m.aliases.map(([n, c]) => `${n}（${exact(c)} 次调用）`).join('；'))}">+${m.aliases.length} 写法</span>`
+      : '';
+    const chips = comp.map((t) =>
+      `<span style="color:${t.color}"><i class="sw"></i>${t.label} <b>${fmt(m[t.key])}</b></span>`).join('');
+    const extra = [
+      m.r > 0 ? `<span>推理 <b>${fmt(m.r)}</b>（已计入输出）</span>` : '',
+      `<span><b>${exact(m.calls)}</b> 次调用</span>`,
+      m.sessions.size ? `<span><b>${exact(m.sessions.size)}</b> 个会话</span>` : '',
+      `<span>${m.priced ? `<b>${money(m.cost)}</b>` : '<b style="color:var(--amber)">未计价</b>'}</span>`,
+      `<span>${esc(m.agentList.map((x) => x.name).join(' · '))}</span>`,
+      Number.isFinite(m.min) ? `<span>${dkey(m.min)} → ${dkey(m.max)}</span>` : '',
+    ].join('');
+    const bars = comp.map((t) => `<b style="flex:${m[t.key].toFixed(0)};background:${t.color}"></b>`).join('');
+    return `
+      <div class="mr-row${i < 3 ? ' top3' : ''}">
+        <div class="mr-rank">${i + 1}</div>
+        <div class="mr-name"><span class="nm" title="${esc(m.name)}">${esc(m.name)}</span>${alias}</div>
+        <div class="mr-bar"><i style="--w:${widthOf(m.total).toFixed(2)}%;background:linear-gradient(90deg,${color},${color}b8);animation-delay:${i * 45}ms"></i></div>
+        <div class="mr-val" title="精确值 ${exact(m.total)} tokens">${fmt(m.total)}<em>${pctS(m.total, grand)}</em></div>
+        <div class="mr-comp">${bars}</div>
+        <div class="mr-sub">${chips}${extra}</div>
+      </div>`;
+  }).join('');
+
+  foot.style.display = '';
+  const hiddenN = S.rankExpand ? 0 : rest.length;
+  const hiddenSum = rest.reduce((s, r) => s + r.total, 0);
+  foot.innerHTML =
+    `<span>${S.rankExpand ? `全部 ${exact(rows.length)} 个模型合计` : `前 ${list.length} 名合计`} <b style="color:var(--ink-2);font-family:var(--font-num)">${fmt(shownSum)}</b> · 占 ${pctS(shownSum, grand)}` +
+    (hiddenN ? `；其余 ${hiddenN} 个模型合计 ${fmt(hiddenSum)} · 占 ${pctS(hiddenSum, grand)}` : '') +
+    `</span>` +
+    (rest.length ? `<span class="link" id="rankToggle">${S.rankExpand ? '收起，只看前 10' : `展开全部 ${rows.length} 个模型`}</span>` : '');
 }
 
 /* ============================================================
@@ -1449,6 +1664,26 @@ $('#priceCancel').addEventListener('click', () => $('#pricingMask').classList.re
 $('#priceSave').addEventListener('click', savePricing);
 $('#pricingMask').addEventListener('click', (e) => { if (e.target.id === 'pricingMask') e.currentTarget.classList.remove('on'); });
 $('#customMask').addEventListener('click', (e) => { if (e.target.id === 'customMask') e.currentTarget.classList.remove('on'); });
+
+/* 模型排行：范围 / 对比条刻度 / 展开 */
+function bindRankSeg(sel, apply) {
+  const el = $(sel);
+  if (!el) return;
+  el.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    $$('button', el).forEach((x) => x.classList.remove('on'));
+    b.classList.add('on');
+    apply(b);
+    renderModelRank();
+  });
+}
+bindRankSeg('#rankScale', (b) => { S.rankScale = b.dataset.k; });
+$('#rankFoot').addEventListener('click', (e) => {
+  if (!e.target.closest('#rankToggle')) return;
+  S.rankExpand = !S.rankExpand;
+  renderModelRank();
+});
 
 /* 动效开关 */
 $('#btnTweaks').addEventListener('click', () => $('#tweakPanel').classList.toggle('on'));

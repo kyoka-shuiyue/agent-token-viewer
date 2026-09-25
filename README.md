@@ -6,11 +6,11 @@
 
 - **不上传任何数据**，不修改任何文件，**不安装任何依赖**
 - 一个 `server.js` + 一个 `index.html`，浏览器打开就是全部
-- 支持 9 类 Agent、跨 Windows / macOS / Linux
+- 支持 10 类 Agent、跨 Windows / macOS / Linux
 
 ![界面总览](docs/screenshot.png)
 
-> 上图是真实数据：9 类 Agent 合计 **3.85B tokens**、23,802 次调用、572 个会话，
+> 上图是真实数据（截图于 2026/9/12，当时接入 9 类）：合计 **3.85B tokens**、23,802 次调用、572 个会话，
 > 缓存读取 2.86B（命中率 75.9%），时间跨度 2026/6/5 → 2026/9/12。
 
 ---
@@ -109,6 +109,10 @@ node server.js --doctor    # 自检：每个数据源的候选路径在不在、
 ✓ DeepSeek Harness      583 条      97,701,250 tokens  [ok]
       存在  C:\Users\you\AppData\Roaming\dsh-desktop\harness\sessions
       缺失  C:\Users\you\.dsh\sessions
+✓ Qoder                 567 条      26,917,714 tokens  [ok]
+      存在  C:\Users\you\.qoder\projects
+      存在  C:\Users\you\AppData\Roaming\com.qoder.app.stable\main.sqlite
+      备注: Qoder 本地不落 token 数（usage 四个字段恒为 0），此处按消息文本长度估算
 ════════════════════════════════════════════════════════════
 ```
 
@@ -200,21 +204,24 @@ https://cdn.jsdelivr.net/gh/kyoka-shuiyue/agent-token-viewer@main/index.html
 ## 一、基本功能
 
 1. **多 Agent 统一总览**
-   一次扫描把 9 类 Agent 的用量合并成可比较的同一套指标：Proma、Pi、oh-my-Pi、Claude Code、Claude Desktop、Codex、ZCode、DeepSeek Harness、OpenCode。
+   一次扫描把 10 类 Agent 的用量合并成可比较的同一套指标：Proma、Pi、oh-my-Pi、Claude Code、Claude Desktop、Codex、ZCode、DeepSeek Harness、OpenCode、Qoder。
 
 2. **总量与占比一眼可见**
    页面顶部一个大数字（总 token），配调用次数、会话数、缓存读取、预估成本四枚胶囊，右侧是各 Agent 占比环图与图例。
 
-3. **单个 Agent 下钻**
+3. **模型总排名（跨 Agent 合并）**
+   总览页在「各 Agent 明细」下方专有一张排行卡：把名字 / ID 相同的模型（不同工具里的前缀、大小写、`[]` 备注写法）合并求和，取 Top 10 与对比条，统计范围跟顶部时间区间联动。
+
+4. **单个 Agent 下钻**
    点任意 Agent 卡片进入详情页：趋势图、类型分布、模型明细、每日热力、会话清单。
 
-4. **任意时间段**
-   全部时间（从最早一条记录到现在）/ 近 30 天 / 近 7 天 / 今日 / 自定义起止日期，切换即时重算，无需重新扫描。
+5. **任意时间段**
+   全部时间（从最早一条记录到现在）/ 近 30 天 / 近 7 天 / 今日 / 自定义起止日期，切换即时重算，无需重新扫描。模型排行可单独切回「当前区间」。
 
-5. **成本估算**
+6. **成本估算**
    给每个模型填四类单价，自动折算预估成本；未计价的模型会被明确提示，不会假装成 0。
 
-6. **纯本地、零依赖**
+7. **纯本地、零依赖**
    只用 Node 内置模块，前端不加载任何 CDN 与外部字体；断网也能跑。
 
 ---
@@ -230,6 +237,7 @@ https://cdn.jsdelivr.net/gh/kyoka-shuiyue/agent-token-viewer@main/index.html
 | 占比环图 | 各 Agent 份额 + 图例百分比 | 每段独立扫出动画；占比 <0.3% 的段自动跳过避免噪点 |
 | 四张统计磁贴 | 输入 / 输出 / 缓存读取 / 缓存写入 | 左侧色条标识类别；缓存磁贴额外显示命中率 |
 | Agent 卡片网格 | 每个 Agent 一张卡 | 含总量、占比条、调用次数、会话数、缓存读取、成本、近 30 日迷你折线；无数据显示「暂无数据」，未安装显示「未安装」 |
+| 模型 Token 排行 Top 10 | 跨 Agent 合并同名 / 同 ID 模型的总量排行 + 对比条 | 位于「各 Agent 明细」网格下方，统计范围**跟顶部时间区间联动**（标题旁直接标出当前区间）；对比条可切「等比条 / 开方条（按平方根缩放，拉高中小模型之间的对比度）」；每行额外给出输入 / 输出 / 缓存读写构成条与数值、调用数、会话数、预估成本或未计价标记、用过它的 Agent、首末使用时间；悬停模型名看被合并了哪些写法，悬停数字看精确值；底部一行对账（榜内合计 / 占比）并可展开全部模型 |
 | 页脚 | 只读声明 + 逐源状态 | 每个 Agent 的条数与文件数，状态点着色 |
 
 ### 2.2 下钻详情页
@@ -242,7 +250,7 @@ https://cdn.jsdelivr.net/gh/kyoka-shuiyue/agent-token-viewer@main/index.html
   - 悬停任意色段显示「日期 · 类别 · 精确数值」
   - 图下方常驻一行：`按月 · 4 个时间桶 | 图内合计 1.16B tokens`，便于对账
 - **Token 类型分布环图**：四类占比，含推理 token 的说明行（标注它已并入输出）。
-- **模型明细**：横向条形排行，显示每个模型的量与占比。
+- **模型明细**：横向条形排行，显示每个模型的量与占比（只算这一个 Agent）；需把同一个模型在不同 Agent 里的量加在一起看，用总览页的「模型 Token 排行」。
 - **每日用量热力图**：锚定当前时间窗口逐日成格，**未使用的日子保留空白格**；按周一对齐分列、整体居中；带「少 → 多」色阶图例；悬停显示当日精确值。
 - **会话明细表**：按用量排序（最多 40 条），显示会话标题（能读到真名就显示真名，如 Codex 的 `session_index.jsonl`、Claude Desktop 的 `local_*.json`、DSH 的 `session/title` 事件）、所用模型、调用次数、token、成本、最近活动时间。
 - 详情页顶部会显示该 Agent 的**口径备注**（例如 Claude Code 会提示"含官方按天统计，早期文件已被清理"）。
@@ -253,6 +261,7 @@ https://cdn.jsdelivr.net/gh/kyoka-shuiyue/agent-token-viewer@main/index.html
 - 自定义按自然日、含起止当天，日期输入框默认填「最早记录日 → 今天」
 - 全部时间的上界取到 `Number.MAX_SAFE_INTEGER`，保证"从最开始到现在"一条不漏
 - 切换后所有数字重新补间、图表重新生长，不是硬刷新
+- 顶部时间区间影响页面上**所有**数字：总览的大数字、各 Agent 卡片、下方的模型排行、下钻详情页全部同步重算
 
 ### 2.4 计价配置
 
@@ -263,11 +272,13 @@ https://cdn.jsdelivr.net/gh/kyoka-shuiyue/agent-token-viewer@main/index.html
 - 留空 = 未计价（计入 0 并被提示），填 `0` = 免费
 - 模型名匹配会自动去掉 `[渠道前缀]`、`provider/` 前缀与 `-thinking` / `-high` / `-free` 等后缀，再做最长前缀匹配——中转渠道自定义名也能命中
 - 自带成本的记录（Pi、OpenCode、Claude Desktop）优先用真实成本，不重复折算
+- Qoder 的 `qfmodel` 不公开单价，默认四个字段留空；要估算得自己按套餐填
 - 保存写入 `pricing-config.json`，全页成本即时重算
 
 ### 2.5 性能与增量
 
 - **行级预过滤**：先对原始行做 `includes('"usage"')` 再 `JSON.parse`，否则 Codex/ZCode 几百 MB 的流式噪声会拖死首次扫描
+  （例外：Qoder 需要 `user` / `attachment` 行累积上下文，预过滤关键词不能只写 `usage`）
 - **文件级缓存**：按 `mtime + size` 复用解析结果，只重扫变化的文件（实测首次 7s → 二次 0.6s → 增量 1.4s）
 - **流式读取**：`readline` 逐行，不把大文件整体读进内存
 - **只读 SQLite**：`node:sqlite` 的 `readOnly` 模式，即使目标工具正在运行也不冲突
@@ -314,6 +325,7 @@ https://cdn.jsdelivr.net/gh/kyoka-shuiyue/agent-token-viewer@main/index.html
 - 不做实时告警（它是扫描式的，需要手动或定时刷新）。
 - 不做云端聚合（只读本机文件）。
 - 不替代各家账单：成本是**按你填的单价折算的估算值**，未计价模型不计入。
+- Qoder 连 token 总量都是估算值（它不落 token），与其他源的官方数字不同一个可信级。
 
 ---
 
@@ -402,6 +414,8 @@ https://cdn.jsdelivr.net/gh/kyoka-shuiyue/agent-token-viewer@main/index.html
 | raw / jsDelivr / ghfast 镜像单文件 | HTTP 200 |
 | 解压后的副本跑 `node server.js --once` | 正常，9 源全部命中，5.3s |
 | 解压后的副本起服务 | `GET /` 200、`/api/status` 200（ready 9/9）、`/api/data` 200 |
+| 接入 Qoder 后跑 `--once` / `--doctor`（2026-09-19） | 10 源全部命中，1.1s；Qoder 567 条 / 5 会话 / 26.9M tokens（估算） |
+| Qoder 详情页浏览器验收 | 卡片、趋势、模型明细、会话标题、`⚠` 估算备注均正常，`window.__errs` 为空 |
 | `node --check server.js` | 通过 |
 | `bash -n start.sh` / 换行符 | 语法通过；全仓库 LF，无 CRLF 污染 |
 | 发布包内容 | 不含 `.scan-cache.json` 与 `pricing-config.json`（不泄露本地用量与私有定价） |
@@ -426,6 +440,7 @@ https://cdn.jsdelivr.net/gh/kyoka-shuiyue/agent-token-viewer@main/index.html
 | ZCode | `~/.zcode/cli/db/db.sqlite` 表 `model_usage` | 独立列 |
 | DeepSeek Harness | `<应用数据>/dsh-desktop/harness/sessions/**/session.jsonl.zstd` | `data.usage` |
 | OpenCode | `~/.local/share/opencode/opencode.db` 表 `message` | `tokens` |
+| Qoder | `~/.qoder/projects/**/*.jsonl` | **无 token 字段** → 按消息文本估算 |
 
 完整路径清单（含跨平台变体、桌面版与 CLI 版差异、可覆盖的环境变量）、字段的确切 JSON 路径、压缩格式、以及每个源踩过的坑，都在
 **[docs/data-sources.md](docs/data-sources.md)**。新增数据源前请先读它，改完请回来补它。
@@ -441,6 +456,7 @@ https://cdn.jsdelivr.net/gh/kyoka-shuiyue/agent-token-viewer@main/index.html
 - Codex 的 `input_tokens` **包含**缓存命中 → 拆成 `input - cached` 与 `cached`
 - OpenCode 的 `reasoning` 是**独立相加项** → 并入输出并单独展示
 - Pi / Codex 的 `reasoning` **已含在 output 内** → 只展示不再加
+- Qoder **根本不落 token** → 四类全部改按消息文本长度估算，缓存读写固定为 0（不虚构命中率）
 
 已处理的重复计数陷阱：
 
@@ -451,6 +467,8 @@ https://cdn.jsdelivr.net/gh/kyoka-shuiyue/agent-token-viewer@main/index.html
 | DeepSeek Harness 的 `assistant/chunk` 回声 | 翻倍 | 只取 `assistant/message` |
 | Claude Desktop 账本与 Claude Code 同一会话 | 跨源重复 | 账本优先，被覆盖的 `cliSessionId` 从 Claude Code 排除 |
 | Claude Code 旧会话文件被自动清理 | 低估两个数量级 | 改用其 `stats-cache.json` 按天统计兜底，并在 UI 标注 |
+| Qoder 桌面 App 与 CLI 共用同一批 session id | 翻倍 | App 库只取会话标题，不取用量 |
+| Qoder `logs/` 与 `projects/` 是同一批请求 | 翻倍 | 只扫 `projects/` |
 
 详见 [docs/units.md](docs/units.md)。
 
@@ -466,14 +484,15 @@ https://cdn.jsdelivr.net/gh/kyoka-shuiyue/agent-token-viewer@main/index.html
 ## 已知限制
 
 1. **Claude Code 的历史会被它自己清理**：旧会话文件删除后无法回补。本项目用它的 `stats-cache.json` 按天统计兜底（四类拆分按比例估算，UI 明确标注），但缓存覆盖不到的日期仍然取不到。
-2. **工具没产生本地记录时就显示"暂无数据"**：先跑 `--doctor` 看路径是否存在。
-3. **单价必须你自己填**：模型名常是中转渠道自定义的名字，程序不猜价格；留空即未计价。
-4. **跨平台路径靠候选列表探测**：新出现的桌面端目录名可能不在候选里，遇到请补文档并提 PR。
+2. **Qoder 的 token 全是估算值**：它本地**不存 token**（`usage` 四个字段恒为 0，App 侧写 `tokenCountsAvailable:false`，服务端只回 credits 与上下文占比）。本项目按消息文本长度估算，并把多轮重发的历史计入输入；缓存读写固定为 0（不虚构命中率）。卡片副标题与详情页 `⚠` 备注都会写明这一点，**不要当成账单数字**。
+3. **工具没产生本地记录时就显示“暂无数据”**：先跑 `--doctor` 看路径是否存在。
+4. **单价必须你自己填**：模型名常是中转渠道自定义的名字，程序不猜价格；留空即未计价。Qoder 的 `qfmodel` 不公开美元单价，默认就是未计价。
+5. **跨平台路径靠候选列表探测**：新出现的桌面端目录名可能不在候选里，遇到请补文档并提 PR。
 
 ## 项目结构
 
 ```
-server.js      扫描服务 + 9 个数据源适配器（零依赖，约 1000 行）
+server.js      扫描服务 + 10 个数据源适配器（零依赖，约 1300 行）
 index.html     界面（内联 CSS/JS，手写 SVG 图表，不加载任何 CDN）
 docs/
   data-sources.md        数据源图谱：路径、格式、字段、坑（本项目最核心的资产）

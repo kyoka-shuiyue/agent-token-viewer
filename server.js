@@ -49,6 +49,10 @@ const CLAUDE_DESKTOP_ROOTS = [...dataCandidates('Claude-3p'), ...dataCandidates(
 const DSH_DESKTOP_ROOTS = [...dataCandidates('dsh-desktop'), ...dataCandidates('deepseek-harness-desktop')];
 /** DeepSeek Harness CLI home（与上游 dsh-home-paths 一致，支持 DSH_HOME 覆盖） */
 const DSH_CLI_HOME = process.env.DSH_HOME || path.join(HOME, '.dsh');
+/** Qoder：CLI 与桌面 App 共用 `~/.qoder`（支持 QODER_HOME 覆盖），App 是 Electron 壳 */
+const QODER_CLI_HOME = process.env.QODER_HOME || path.join(HOME, '.qoder');
+/** Qoder 桌面 App 的 userData 目录（Windows/Linux 命名差异见 dataCandidates） */
+const QODER_APP_ROOTS = [...dataCandidates('com.qoder.app.stable'), ...dataCandidates('Qoder App'), ...dataCandidates('qoder')];
 const PRESET_FILE = path.join(path.dirname(ROOT), 'pricing-presets.json');
 
 /* ------------------------------------------------------------------ */
@@ -277,22 +281,143 @@ function zcodeLineHandler(o, st) {
 }
 
 /** Proma 会话索引里的标题 */
+/** 只读文件头部若干字节（取标题用，不整文件载入） */
+async function readHead(file, bytes = 65536) {
+  let fh = null;
+  try {
+    fh = await fsp.open(file, 'r');
+    const len = Math.min((await fh.stat()).size, bytes);
+    if (len <= 0) return '';
+    const b = Buffer.alloc(len);
+    await fh.read(b, 0, len, 0);
+    return b.toString('utf8');
+  } catch { return ''; }
+  finally { try { if (fh) await fh.close(); } catch { /* 忽略 */ } }
+}
+
+/** 会话文件头部信息缓存：标题与 cwd 不会变，避免每次刷新重读 */
+const headMetaCache = new Map();
+
+/**
+ * 通用兜底：从会话文件本身提取标题（首条真实用户输入）与 cwd。
+ * 用于没有独立标题索引的源（Claude Code / Pi / oh-my-Pi / Qoder）。
+ * opts.sidOf(file, firstObj) → 该文件对应的会话 id，可返回一个或多个（必须与记录里的 rec.s 对得上）
+ * opts.userTextOf(o)          → 该行是用户输入时返回文本，否则返回 ''
+ * opts.skip(lineText)         → 判定为噪声（如隐藏宿主上下文）时跳过
+ */
+async function sessionMetaFromFiles(files, opts) {
+  const out = {};
+  for (const file of files) {
+    let hit = headMetaCache.get(file);
+    if (!hit) {
+      hit = { title: '', cwd: '' };
+      const head = await readHead(file);
+      let firstObj = null;
+      for (const raw of head.split('\n')) {
+        if (!raw.trim()) continue;
+        const o = tryJson(raw);
+        if (!o) continue;
+        if (!firstObj) firstObj = o;
+        if (!hit.cwd && typeof o.cwd === 'string') hit.cwd = o.cwd;
+        if (!hit.title) {
+          const text = opts.userTextOf(o);
+          if (text && !(opts.skip && opts.skip(text))) hit.title = text.slice(0, 60);
+        }
+        if (hit.cwd && hit.title) break;
+      }
+      hit.sid = opts.sidOf ? opts.sidOf(file, firstObj) : path.basename(file, '.jsonl');
+      headMetaCache.set(file, hit);
+    }
+    if (!hit.sid) continue;
+    for (const sid of [].concat(hit.sid)) {
+      if (!sid) continue;
+      const prev = out[sid];
+      if (!prev || (!prev.title && hit.title)) out[sid] = { title: hit.title, cwd: hit.cwd };
+    }
+  }
+  return out;
+}
+
+/** Pi 家族（Pi / oh-my-Pi）的会话 id：主取 session 行的 id，同时登记文件名与其 uuid 后缀作别名 */
+function piSidOf(file, first) {
+  const base = path.basename(file, '.jsonl');
+  const ids = [base];
+  if (first && first.type === 'session' && first.id) ids.unshift(first.id);
+  const tail = base.split('_').pop();
+  if (tail && tail !== base) ids.push(tail);
+  return ids;
+}
+
+/** Claude Code 风格行：首条真正的用户输入（排除 tool_result 回传） */
+function firstUserInputText(o) {
+  if (o.type !== 'user') return '';
+  const c = (o.message || {}).content;
+  if (typeof c === 'string') return c.trim();
+  if (!Array.isArray(c)) return '';
+  if (c.some((p) => p && p.type === 'tool_result')) return '';
+  return c.filter((p) => p && p.type === 'text' && p.text).map((p) => p.text).join('\n').trim();
+}
+
+/** Pi / oh-my-Pi 风格行：type:"message" + role:"user"（工具结果单独是 type:"toolResult"） */
+function piUserInputText(o) {
+  if (o.type !== 'message') return '';
+  const m = o.message || {};
+  if (m.role !== 'user') return '';
+  const c = m.content;
+  if (typeof c === 'string') return c.trim();
+  if (!Array.isArray(c)) return '';
+  return c.filter((p) => p && p.type === 'text' && p.text).map((p) => p.text).join('\n').trim();
+}
+
+/** Proma 会话文件→session_id 集合的缓存（与 headMetaCache 分开，值类型不同） */
+const promaSidByFile = new Map();
+/** 从原始行里快速抽 session_id，避开整行 JSON.parse */
+const SID_RE = /"session_id"\s*:\s*"([^"]+)"/;
+
+/**
+ * Proma 会话标题。
+ * 关键：会话 jsonl 里的 `session_id` 是索引条目的 **`sdkSessionId`**，不是 `id`；
+ * 只按 `id` 建索引会一条也匹不上。另有少量会话的 `sdkSessionId` 没写回索引，
+ * 但文件名就是它的 `id`，所以再用「文件名 → 索引 id」读一次首行补映射。
+ */
 async function promaSessionMeta() {
   const out = {};
+  let list = [];
   try {
     const d = JSON.parse(await fsp.readFile(path.join(HOME, '.proma', 'agent-sessions.json'), 'utf8'));
     const sess = d && d.sessions;
-    if (Array.isArray(sess)) {
-      for (const s of sess) {
-        const id = s.sessionId || s.id;
-        if (id) out[id] = { title: s.title || s.name || s.summary || '', cwd: s.cwd || '' };
-      }
-    } else if (sess && typeof sess === 'object') {
-      for (const [id, s] of Object.entries(sess)) {
-        if (s && typeof s === 'object') out[id] = { title: s.title || s.name || s.summary || '', cwd: s.cwd || '' };
-      }
-    }
+    if (Array.isArray(sess)) list = sess;
+    else if (sess && typeof sess === 'object') list = Object.values(sess);
   } catch { /* 索引不存在时忽略 */ }
+
+  const byId = {};
+  for (const s of list) {
+    if (!s || typeof s !== 'object') continue;
+    const meta = { title: s.title || s.name || s.summary || '', cwd: s.cwd || '' };
+    // 主键：SDK 会话 id（与记录里的 session_id 同一体系）；别名：Proma 内部 id
+    if (s.sdkSessionId) out[s.sdkSessionId] = meta;
+    if (s.id) { byId[s.id] = meta; if (!out[s.id]) out[s.id] = meta; }
+  }
+
+  // 补漏：索引里没登记 sdkSessionId 的会话，用文件名（= 内部 id）反查条目。
+  // 一个文件可能因续聊/恢复出现**多个** session_id，所以必须全文收集，不能只看头部。
+  const files = await walk(path.join(HOME, '.proma', 'agent-sessions'), (p, n) => n.endsWith('.jsonl'), 0, 2);
+  for (const file of files) {
+    const fname = path.basename(file, '.jsonl');
+    const meta = byId[fname];
+    if (!meta) continue;
+    let sids = promaSidByFile.get(file);
+    if (!sids) {
+      sids = new Set();
+      // 只跑一次正则，不做 JSON.parse：这里要扫全部会话文件，成本敏感
+      await readLines(file, (line) => {
+        const m = SID_RE.exec(line);
+        if (m) sids.add(m[1]);
+      }, hasAny('"session_id"'));
+      promaSidByFile.set(file, sids);
+    }
+    for (const sid of sids) if (!out[sid]) out[sid] = meta;
+  }
   return out;
 }
 
@@ -524,7 +649,10 @@ const AGENT_DEFS = [
     roots: [path.join(HOME, '.pi', 'agent', 'sessions')],
     async scan(ctx) {
       const files = await walk(path.join(HOME, '.pi', 'agent', 'sessions'), (p, n) => n.endsWith('.jsonl'));
-      return { records: await scanWithCache(files, piLineHandler, null, ctx.stats, hasAny(['"usage"', '"type":"session"'])), sessions: {} };
+      return {
+        records: await scanWithCache(files, piLineHandler, null, ctx.stats, hasAny(['"usage"', '"type":"session"'])),
+        sessions: await sessionMetaFromFiles(files, { sidOf: piSidOf, userTextOf: piUserInputText }),
+      };
     },
   },
   {
@@ -532,7 +660,10 @@ const AGENT_DEFS = [
     roots: [path.join(HOME, '.omp', 'agent', 'sessions')],
     async scan(ctx) {
       const files = await walk(path.join(HOME, '.omp', 'agent', 'sessions'), (p, n) => n.endsWith('.jsonl'));
-      return { records: await scanWithCache(files, piLineHandler, null, ctx.stats, hasAny(['"usage"', '"type":"session"'])), sessions: {} };
+      return {
+        records: await scanWithCache(files, piLineHandler, null, ctx.stats, hasAny(['"usage"', '"type":"session"'])),
+        sessions: await sessionMetaFromFiles(files, { sidOf: piSidOf, userTextOf: piUserInputText }),
+      };
     },
   },
   {
@@ -547,9 +678,12 @@ const AGENT_DEFS = [
       const stats = await claudeStatsRecords();
       const extra = fileRecs.filter((r) => !stats.days.has(dayKeyLocal(r.t)));
       const records = [...stats.records, ...extra];
+      const sessions = await sessionMetaFromFiles(all, { userTextOf: firstUserInputText });
+      // 来自主动按天统计的记录没有会话文件，给个可读的桶名，不暴露内部 id
+      if (stats.records.length) sessions['claude-stats'] = { title: 'Claude Code 官方按天统计（早期会话文件已清理）' };
       return {
         records,
-        sessions: {},
+        sessions,
         note: stats.records.length
           ? `含 ${stats.days.size} 天的官方按天统计（早期会话文件已被自动清理；四类拆分为模型比例估算）`
           : '',
@@ -728,6 +862,25 @@ const AGENT_DEFS = [
       return { records, sessions };
     },
   },
+  {
+    id: 'qoder', name: 'Qoder', color: '#818cf8', subtitle: 'Qoder CLI / App 会话（token 为文本估算）',
+    roots: [path.join(QODER_CLI_HOME, 'projects'), ...QODER_APP_ROOTS],
+    async scan(ctx) {
+      const files = await walk(path.join(QODER_CLI_HOME, 'projects'), (p, n) => n.endsWith('.jsonl'), 0, 3);
+      // 预过滤必须把 user / attachment 行也放进来（它们只用于累积上下文），
+      // 且不能依赖 `"role":"user"` 这种紧凑写法：部分版本会序列化出空格，所以只匹配关键词
+      const records = await scanWithCache(files, qoderLineHandler, null, ctx.stats,
+        hasAny(['usage', '"user"', '"attachment"']));
+      const sessions = await qoderSessionMeta(ctx.stats);
+      return {
+        records, sessions,
+        note: records.length
+          ? 'Qoder 本地不落 token 数（usage 四个字段恒为 0，服务端只回 credits 与上下文占比），'
+            + '此处 token 按消息文本长度估算，多轮重发的历史已计入输入，与官方账单不是同一口径'
+          : '',
+      };
+    },
+  },
 ];
 
 /** Codex：输出累计用量快照（ct = 累计总量） */
@@ -766,6 +919,134 @@ function dshLineHandler(o, st) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Qoder：本地不落 token，改按消息文本估算                              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 字符 → token 的粗估：CJK / 假名 / 韩文按一字一 token，其余按四字符一 token。
+ * Qoder 使用的 qfmodel 词表不公开，该启发式与 Qoder 自己算 context_usage_ratio 时
+ * 用的字符量同量级（本机实测二者 log-log 相关系数 0.94）。
+ */
+const CJK_RE = /[\u1100-\u11ff\u2e80-\u9fff\uf900-\ufaff\uac00-\ud7af\ufe30-\ufe4f\uff00-\uff6f]|[\u{20000}-\u{33fff}]/u;
+function estTokens(s) {
+  if (!s) return 0;
+  let cjk = 0, other = 0;
+  for (const ch of s) { if (CJK_RE.test(ch)) cjk += 1; else other += 1; }
+  return cjk + Math.round(other / 4);
+}
+
+/** 把 Claude Code 风格的 content（字符串或部件数组）摊成纯文本 */
+function flattenParts(content) {
+  if (content == null) return '';
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return JSON.stringify(content);
+  let out = '';
+  for (const p of content) {
+    if (!p) continue;
+    if (typeof p === 'string') { out += p + '\n'; continue; }
+    if (p.type === 'text') out += (p.text || '') + '\n';
+    else if (p.type === 'thinking') out += (p.thinking || p.text || '') + '\n';
+    else if (p.type === 'tool_use') out += JSON.stringify(p.input || {}) + '\n';
+    else if (p.type === 'tool_result') out += flattenParts(p.content) + '\n';
+    else out += JSON.stringify(p) + '\n';
+  }
+  return out;
+}
+
+/** attachment 行形态多（skill_listing / hook_output / agent_listing_delta …），取正文后摊平 */
+function attachmentText(a) {
+  if (!a) return '';
+  const parts = [a.content, a.output, a.text, a.prompt];
+  const body = parts.filter((x) => typeof x === 'string' && x).join('\n');
+  return body || flattenParts(a.addedLines || '') || JSON.stringify(a);
+}
+
+/**
+ * Qoder CLI 会话行解析（`~/.qoder/projects/<项目>/<会话>.jsonl`，子代理在其 subagents/ 下）。
+ * 格式是 Claude Code 事件流，但 `message.usage` 的四个 token 字段恒为 0：
+ * Qoder 服务端只回 credits 与 context_usage_ratio，本地不落 token 数（App 侧也明确写
+ * `tokenCountsAvailable:false`）。所以这里只能按文本估算：
+ *   i = 本轮新增输入 + 之前累积的上下文（多轮会话每轮都要重发历史）
+ *   o = 本轮 assistant 输出（thinking 一并计入，与各家口径一致）
+ *   cr / cw 一律留 0 —— Qoder 未上报缓存，不虚构命中率
+ * `context_usage_ratio` 相比上一轮回落视为发生过上下文压缩，按回落比例收缩累积值。
+ */
+function qoderLineHandler(o, st) {
+  if (o.type === 'user' || o.type === 'attachment') {
+    const text = o.type === 'user' ? flattenParts((o.message || {}).content) : attachmentText(o.attachment);
+    st.pend = num(st.pend) + estTokens(text);
+    return null;
+  }
+  if (o.type !== 'assistant') return null;
+  const m = o.message || {};
+  const u = m.usage;
+  if (!u) return null; // 流式中间块（thinking / content_block_start）不带 usage
+  const id = o.uuid || m.id;
+  if (id) {
+    if (!st.seen) st.seen = new Set();
+    if (st.seen.has(id)) return null;
+    st.seen.add(id);
+  }
+  const inc = num(st.pend); st.pend = 0;
+  const out = estTokens(flattenParts(m.content));
+  const ctx = num(st.ctx);
+  const rec = norm({
+    t: toMs(o.timestamp),
+    m: modelStr(m.model) || modelStr(o.model) || 'unknown',
+    i: ctx + inc, o: out, cr: 0, cw: 0, r: 0,
+    s: o.sessionId || path.basename(st.file, '.jsonl'),
+  });
+  let next = ctx + inc + out;
+  const ratio = num(u.context_usage_ratio);
+  if (ratio > 0 && num(st.ratio) > ratio) next = Math.round(next * (ratio / num(st.ratio)));
+  if (ratio > 0) st.ratio = ratio;
+  st.ctx = next;
+  return rec;
+}
+
+/**
+ * Qoder 会话标题与 cwd。两个来源，都不产出用量记录（App 与 CLI 是同一批 session id，
+ * 取用量会重复计数）：
+ *   1. 桌面 App 的 main.sqlite 表 chat_sessions（有正经标题）
+ *   2. 回退：CLI 会话文件里的首条用户输入与 cwd 字段
+ */
+async function qoderSessionMeta(stats) {
+  const out = {};
+  let DatabaseSync = null;
+  try { ({ DatabaseSync } = require('node:sqlite')); } catch { /* Node 版本过低 */ }
+  if (DatabaseSync) {
+    for (const root of QODER_APP_ROOTS) {
+      const dbPath = path.join(root, 'main.sqlite');
+      if (!isFile(dbPath)) continue;
+      let db = null;
+      try {
+        db = new DatabaseSync(dbPath, { readOnly: true });
+        stats.files += 1;
+        try { stats.bytes += (await fsp.stat(dbPath)).size; } catch { /* 忽略 */ }
+        for (const s of db.prepare('SELECT session_id, title, cwd, model FROM chat_sessions').all()) {
+          if (s.session_id) out[s.session_id] = { title: s.title || '', cwd: s.cwd || '', model: s.model || '' };
+        }
+      } catch { /* App 未装或表结构不同 */ }
+      finally { try { if (db) db.close(); } catch { /* 忽略 */ } }
+    }
+  }
+
+  // 回退补充：从会话文件本身取 cwd 与首条用户输入当标题
+  const files = await walk(path.join(QODER_CLI_HOME, 'projects'), (p, n) => n.endsWith('.jsonl'), 0, 3);
+  const local = await sessionMetaFromFiles(files, {
+    userTextOf: firstUserInputText,
+    skip: (t) => t.startsWith('[QODER_LIVE_VOICE_CONTEXT]'),
+  });
+  for (const [sid, meta] of Object.entries(local)) {
+    const prev = out[sid];
+    if (!prev) { out[sid] = meta; continue; }
+    if (!prev.title && meta.title) prev.title = meta.title;
+    if (!prev.cwd && meta.cwd) prev.cwd = meta.cwd;
+  }
+  return out;
+}
+
+/* ------------------------------------------------------------------ */
 /* 计价配置                                                             */
 /* ------------------------------------------------------------------ */
 
@@ -783,6 +1064,8 @@ const DEFAULT_PRICING = {
   'big-pickle': { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 },
   'minimax-m3-free': { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 },
   'deepseek-v4-flash-free': { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 },
+  // Qoder 的 qfmodel 不公开美元单价（按官方 credits 套餐计费），留空让用户自己按套餐折算
+  'qfmodel': { input: null, output: null, cacheRead: null, cacheCreation: null },
 };
 
 async function ensurePricingFile() {
@@ -962,6 +1245,7 @@ async function runDoctor() {
     zcode: [path.join(HOME, '.zcode', 'cli', 'db', 'db.sqlite'), path.join(HOME, '.zcode', 'cli', 'agents'), path.join(HOME, '.zcode', 'cli', 'rollout')],
     dsh: [...DSH_DESKTOP_ROOTS.flatMap((b) => [path.join(b, 'harness', 'sessions'), b]), path.join(DSH_CLI_HOME, 'sessions'), path.join(DSH_CLI_HOME, 'storages')],
     opencode: [...new Set([path.join(HOME, '.local', 'share', 'opencode'), ...dataCandidates('opencode')])].flatMap((d) => [path.join(d, 'opencode.db'), path.join(d, 'opencode-local.db')]),
+    qoder: [path.join(QODER_CLI_HOME, 'projects'), ...QODER_APP_ROOTS.map((b) => path.join(b, 'main.sqlite'))],
   };
   console.log('\n数据源自检 · ' + os.platform() + ' · home=' + HOME + (process.env.DSH_HOME ? ' · DSH_HOME=' + process.env.DSH_HOME : ''));
   console.log('═'.repeat(72));

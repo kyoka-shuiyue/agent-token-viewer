@@ -148,5 +148,11 @@
     "output": 0.057,
     "cacheRead": null,
     "cacheCreation": null
+  },
+  "qfmodel": {
+    "input": null,
+    "output": null,
+    "cacheRead": null,
+    "cacheCreation": null
   }
 }
