@@ -1,0 +1,295 @@
+'use strict';
+// 仅在显式设置 TOKEN_VIEWER_SMOKE_REPORT 的验收进程中执行。
+module.exports = async function verifyUI(window, appMenu) {
+  const contents = window.webContents;
+  // 真实绘制/焦点验收需要活动窗口；后台节流会延迟媒体查询和动画完成事件。
+  contents.setBackgroundThrottling(false);
+  window.show();
+  window.focus();
+  contents.focus();
+  await new Promise(r=>setTimeout(r,150));
+  const bounds = window.getBounds();
+  const checks = await contents.executeJavaScript(`(async()=>{
+    const checks = {};
+    const check = (key, passed, diagnostic) => {checks[key]=!!passed;if(!passed)throw new Error('UI 验收失败：'+key+(diagnostic?' '+JSON.stringify(diagnostic):''));};
+    const pause = (ms) => new Promise(r=>setTimeout(r,ms));
+    const waitUntil = async (predicate) => {const limit=Date.now()+1500;while(!predicate()&&Date.now()<limit)await pause(20);};
+    const originalPricing = JSON.parse(JSON.stringify(S.pricing));
+    const originalCalm = S.fx.calm;
+    const ids = Object.keys(S.data.agents);
+    check('todayIsDefault',S.range.key==='today'&&document.querySelector('#heroLabel').textContent==='今天用了多少');
+    check('todayTotalMatchesRecords',Number(document.querySelector('#heroTotal').dataset.v)===aggAll().total);
+    check('recentSevenCalendarDays',document.querySelectorAll('#recentBars button').length===7&&S.dailyInsight.days[6].key===dayKey(Date.now()));
+    const originalRecentDay=document.querySelector('#recentBars button');
+    originalRecentDay.focus();
+    check('recentKeyboardExploration',document.querySelector('#recentBars').classList.contains('exploring')&&document.querySelector('#recentValue').textContent.includes(originalRecentDay.dataset.day.slice(5).replace('-','/')),{active:document.activeElement.outerHTML.slice(0,180),day:originalRecentDay.dataset.day,caption:document.querySelector('#recentValue').textContent,classes:document.querySelector('#recentBars').className});
+    originalRecentDay.click();
+    check('recentDayFiltersRecords',S.range.key==='custom'&&dayKey(S.range.from)===originalRecentDay.dataset.day&&dayKey(S.range.to)===originalRecentDay.dataset.day&&Number(document.querySelector('#heroTotal').dataset.v)===aggAll().total);
+    document.querySelector('#recentMetric [data-metric="cost"]').click();
+    check('recentCostMode',S.recentMetric==='cost'&&document.querySelector('#recentFoot').textContent.includes('未计价不计入')&&document.querySelectorAll('#recentBars button').length===7);
+    document.querySelector('#recentMetric [data-metric="tokens"]').click();setRange('today');
+    check('desktopBridgeIsLimited',Object.keys(window.tokenViewerDesktop).join(',')==='openMenu'&&typeof window.require==='undefined'&&typeof window.process==='undefined');
+    check('warmTitleBar',getComputedStyle(document.querySelector('#desktopBar')).backgroundColor==='rgb(250, 246, 239)');
+    check('desktopDragRegion',getComputedStyle(document.querySelector('#desktopBar')).getPropertyValue('-webkit-app-region')==='drag'&&getComputedStyle(document.querySelector('#desktopMenu')).getPropertyValue('-webkit-app-region')==='no-drag');
+    check('nativeWindowControls',navigator.windowControlsOverlay.visible&&navigator.windowControlsOverlay.getTitlebarAreaRect().height>0);
+    check('widerContent',getComputedStyle(document.querySelector('.shell')).maxWidth==='1800px');
+    check('warmPageToolbar',getComputedStyle(document.querySelector('#topbar')).backgroundColor==='rgba(250, 246, 239, 0.94)');
+    S.fx.calm=false;applyMotionPreference();
+    const view=document.querySelector('#overview');
+    replay(view);await pause(35);
+    const before=getComputedStyle(view).transform;
+    replay(view);
+    check('viewMotionInterruptsFromLiveFrame',view._viewAnimation.effect.getKeyframes()[0].transform===before);
+    await view._viewAnimation.finished;
+    check('viewMotionSettles',getComputedStyle(view).transform==='none');
+    setDialog('customMask',true);await pause(40);setDialog('customMask',false);await pause(30);setDialog('customMask',true);await pause(300);
+    await waitUntil(()=>getComputedStyle(document.querySelector('#customMask .modal')).transform==='none');
+    check('modalReverseSettles',getComputedStyle(document.querySelector('#customMask .modal')).transform==='none'&&!document.querySelector('#customMask').inert,{transform:getComputedStyle(document.querySelector('#customMask .modal')).transform,visibility:document.visibilityState,duration:getComputedStyle(document.querySelector('#customMask .modal')).transitionDuration});
+    setDialog('customMask',false);await pause(300);
+    S.fx.calm=true;applyMotionPreference();replay(view);
+    check('reducedMotionDisablesMovement',getComputedStyle(document.querySelector('.agent')).transitionDuration==='0s'&&view._viewAnimation.playState!=='running');
+    S.fx.calm=originalCalm;applyMotionPreference();
+    check('foldedTIcon',document.querySelector('.brand .mark img').naturalWidth>0&&document.querySelector('.boot-inner .mark img').naturalWidth>0);
+    const nodes=new Map([...document.querySelectorAll('#agents .agent')].map(el=>[el.dataset.agentId,el]));
+    const focusCard=document.querySelector('#agents .agent');focusCard.focus({preventScroll:true});
+    setRange('today');
+    check('rankNodesReused',[...document.querySelectorAll('#agents .agent')].every(el=>nodes.get(el.dataset.agentId)===el));
+    check('rankFocusRetained',document.activeElement===focusCard);
+    setRange('all');await pause(35);setRange('7d');await pause(25);setRange('all');await pause(280);
+    await waitUntil(()=>[...document.querySelectorAll('#agents .agent')].every(el=>!el._rankMotion));
+    check('rankRapidSwitchSettles',[...document.querySelectorAll('#agents .agent')].every(el=>!el._rankMotion&&getComputedStyle(el).translate==='none'));
+    const legendRow=document.querySelector('#donutLegend [data-segment]');
+    legendRow.focus();
+    check('donutLegendFocusLinks',document.querySelector('#donutBox .donut').classList.contains('exploring')&&document.querySelector('#donutBox [data-segment="'+legendRow.dataset.segment+'"]').classList.contains('explored'));
+    setRange('7d');setRange('all');
+    check('donutLegendFocusSurvivesRender',document.activeElement.dataset.segment===legendRow.dataset.segment);
+    document.querySelector('#btnRefresh').focus();
+    check('donutLegendRestores',!document.querySelector('#donutBox .donut').classList.contains('exploring'));
+    const sourceSummary=document.querySelector('.source-details summary');
+    sourceSummary.click();await pause(45);sourceSummary.click();await pause(25);sourceSummary.click();await pause(260);
+    await waitUntil(()=>document.querySelector('.source-details').open&&document.querySelector('#srcPanel').style.height==='auto');
+    check('sourceReverseSettles',document.querySelector('.source-details').open&&!document.querySelector('#srcPanel').inert&&document.querySelector('#srcPanel').style.height==='auto');
+    renderSources();
+    check('sourceDataUpdateKeepsHeight',document.querySelector('#srcPanel').getBoundingClientRect().height>=document.querySelector('#srcList').getBoundingClientRect().height);
+    sourceSummary.click();await pause(260);
+    await waitUntil(()=>!document.querySelector('.source-details').open);
+    check('sourceClosesAccessibly',!document.querySelector('.source-details').open&&document.querySelector('#srcPanel').inert&&sourceSummary.getAttribute('aria-expanded')==='false');
+    sourceSummary.click();await pause(30);S.fx.calm=true;applyMotionPreference();
+    check('reducedMotionSettlesNewAnimations',uiAnimationRuns.size===0&&document.querySelector('#srcPanel').style.height==='auto');
+    sourceSummary.click();check('reducedDisclosureImmediate',!document.querySelector('.source-details').open&&document.querySelector('#srcPanel').inert);
+    S.fx.calm=originalCalm;applyMotionPreference();
+    setRange('all');
+    const ranked=buildModelRanking(visibleAgents(),S.range);
+    check('globalModelsMatchTotal',ranked.reduce((sum,row)=>sum+row.value,0)===aggAll().total);
+    check('globalModelsTopTen',document.querySelectorAll('#modelRankList li').length===Math.min(10,ranked.length));
+    scrollToModelRanking('instant');
+    const expandControl=document.querySelector('#modelRankMore');
+    const controlBefore=expandControl.getBoundingClientRect();
+    const hitsControl=()=>{const r=expandControl.getBoundingClientRect();return r.top>=document.querySelector('#topbar').getBoundingClientRect().bottom&&r.bottom<=innerHeight&&expandControl.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2));};
+    if(ranked.length>10)check('rankingExpandReachableAtStart',hitsControl(),{control:controlBefore.toJSON(),height:innerHeight});
+    if(ranked.length>10)document.querySelector('#modelRankMore').click();
+    check('globalModelsShowAll',document.querySelectorAll('#modelRankList li').length===ranked.length);
+    if(ranked.length>10){
+      await waitUntil(()=>!document.querySelector('#modelRankViewport')?true:!document.querySelector('#modelRankViewport')._expandMotion);
+      check('rankingExpandControlStaysReachable',hitsControl());
+      const controlAfter=expandControl.getBoundingClientRect();
+      check('rankingExpandControlDoesNotTeleport',Math.abs(controlAfter.top-controlBefore.top)<4);
+    }
+    document.querySelector('#modelRankRangePills [data-range="7d"]').click();
+    await pause(300);
+    check('rankingLocalRangeSynchronizes',S.range.key==='7d'&&document.querySelector('#rangePills .on').dataset.range==='7d'&&document.querySelector('#modelRankRangePills .on').dataset.range==='7d');
+    document.querySelector('#rangePills [data-range="all"]').click();
+    await pause(300);
+    check('rankingGlobalRangeKeepsAnchor',S.range.key==='all'&&document.querySelector('#modelRankRangePills .on').dataset.range==='all'&&document.querySelector('#modelRankingTitle').getBoundingClientRect().top>=document.querySelector('#topbar').getBoundingClientRect().bottom&&document.querySelector('#modelRankingTitle').getBoundingClientRect().top<innerHeight/2);
+    document.querySelector('#modelRankRangePills [data-range="custom"]').click();
+    check('rankingCustomRangeOpens',document.querySelector('#customMask').classList.contains('on')&&document.querySelector('.shell').inert);
+    document.querySelector('#dateCancel').click();
+    check('rankingCustomRangeCloses',!document.querySelector('#customMask').classList.contains('on')&&!document.querySelector('.shell').inert);
+    const modelSource=document.querySelector('#modelRankList [data-agent]');
+    modelSource.click();check('modelSourceOpensAgent',S.view==='agent'&&S.agent===modelSource.dataset.agent);backToOverview();
+    check('modelReturnFocus',document.activeElement===modelSource);
+    const originalData=S.data,originalRange=S.range,originalAllModels=S.allModels;
+    try {
+      const rec=(m,i,t)=>({m,i,o:0,cr:0,cw:0,r:0,t,s:'fixture'});
+      S.data={...S.data,agents:{fixture:{id:'fixture',name:'Fixture',records:[rec('Alpha',100,50),rec('Alpha',10,150),rec('Beta',10,50),rec('Beta',300,150),...Array.from({length:12},(_,i)=>rec('Other '+i,1,50))]}}};
+      S.range={key:'all',from:0,to:200};S.allModels=true;S.fx.calm=false;applyMotionPreference();renderModelRanking();
+      scrollToModelRanking('instant');await pause(320);
+      const alpha=[...document.querySelectorAll('#modelRankList li')].find(el=>el.dataset.model==='Alpha');
+      const rankBefore={top:alpha.getBoundingClientRect().top,scroll:scrollY,allowed:uiMotionAllowed()};
+      S.range={key:'custom',from:0,to:100};renderModelRanking();
+      check('modelRankMotionStarts',!!alpha._modelMove&&!!alpha.querySelector('.model-fill')._modelBar,{before:rankBefore,after:alpha.getBoundingClientRect().top,visible:isVisibleInViewport(alpha),move:!!alpha._modelMove,bar:!!alpha.querySelector('.model-fill')._modelBar});
+      await pause(35);
+      const liveBar=getComputedStyle(alpha.querySelector('.model-fill')).transform;
+      S.range={key:'all',from:0,to:200};renderModelRanking();
+      check('modelRowsReuseNodes',[...document.querySelectorAll('#modelRankList li')].find(el=>el.dataset.model==='Alpha')===alpha);
+      check('modelBarsContinueFromLiveFrame',alpha.querySelector('.model-fill')._modelBar.animation.effect.getKeyframes()[0].transform===liveBar);
+      const modelSettled=()=>[...document.querySelectorAll('#modelRankList li')].every(el=>!el._modelMove&&!el.querySelector('.model-fill')._modelBar&&!el.querySelector('.model-amount span')._modelNumber&&getComputedStyle(el).translate==='none');
+      await waitUntil(modelSettled);
+      check('modelRapidSwitchSettles',modelSettled());
+      const expansion=document.querySelector('#modelRankViewport');
+      document.querySelector('#modelRankMore').click();await pause(35);
+      const liveHeight=expansion.getBoundingClientRect().height;
+      document.querySelector('#modelRankMore').click();
+      check('modelExpansionReversesFromLiveFrame',!!expansion._expandMotion&&Math.abs(parseFloat(expansion._expandMotion.animation.effect.getKeyframes()[0].height)-liveHeight)<2);
+      await waitUntil(()=>!expansion._expandMotion);
+      check('modelExpansionSettles',S.allModels&&expansion.style.height==='');
+      document.querySelector('#modelRankMore').click();S.fx.calm=true;applyMotionPreference();
+      check('modelExpansionReducedMotionSettles',!expansion._expandMotion&&expansion.style.height===''&&!S.allModels);
+      S.allModels=true;S.fx.calm=false;applyMotionPreference();renderModelRanking();
+      const origin=alpha.querySelector('button');origin.focus();renderModelRanking();
+      check('modelSourceFocusRetained',document.activeElement===origin);
+      S.range={key:'custom',from:0,to:100};renderModelRanking();S.fx.calm=true;applyMotionPreference();
+      check('modelReducedMotionSettles',uiAnimationRuns.size===0&&getComputedStyle(alpha).translate==='none');
+      S.range={key:'custom',from:500,to:600};renderModelRanking();
+      check('modelEmptyRange',document.querySelectorAll('#modelRankList li').length===0&&document.querySelector('#modelRankCoverage').textContent.includes('暂无'));
+    } finally {S.data=originalData;S.range=originalRange;S.allModels=originalAllModels;S.fx.calm=originalCalm;applyMotionPreference();renderModelRanking();scrollTo({top:0,behavior:'instant'});}
+    S.allModels=false;renderModelRanking();
+    check('allTenSources',ids.length===10&&ids.includes('mirage')&&!ids.includes('proma'));
+    for(const id of ids){
+      if(id===ids[0]) [...document.querySelectorAll('#agents .agent')].find(el=>el.dataset.agentId===id).scrollIntoView({block:'center',behavior:'instant'});
+      openAgent(id);
+      if(id===ids[0]) {
+        check('headingBridgeStarts',viewBridges.size>0&&document.querySelectorAll('.head-bridging').length>0&&document.activeElement.id==='btnBack');
+        await pause(260);
+        await waitUntil(()=>viewBridges.size===0);
+        check('headingBridgeRevealsTitle',viewBridges.size===0&&!document.querySelector('.head-bridging,.view-bridge'));
+      }
+      check(id+'Detail',document.querySelector('#detail h2').textContent===S.data.agents[id].name);
+      check(id+'AllSessions',document.querySelectorAll('#sessTable tbody tr').length===Math.max(1,new Set(S.data.agents[id].records.map(r=>r.s).filter(Boolean)).size));
+      document.querySelector('#segMode button[data-m="type"]').click();
+      document.querySelector('#segGran button[data-g="month"]').click();
+      check(id+'Trend',!!document.querySelector('#trend svg'));
+      if(id===ids[0]) {
+        const trend=document.querySelector('#trend');
+        document.querySelector('#segMode button[data-m="model"]').click();await pause(30);
+        const opacity=getComputedStyle(trend).opacity;
+        document.querySelector('#segGran button[data-g="day"]').click();
+        check('trendFadeRetargetsLiveOpacity',Math.abs(trend._trendFade.animation.effect.getKeyframes()[0].opacity-Number(opacity))<.025);
+        await waitUntil(()=>!trend._trendFade);check('trendFadeSettles',!trend._trendFade&&getComputedStyle(trend).opacity==='1');
+        S.fx.calm=true;applyMotionPreference();document.querySelector('#segMode button[data-m="type"]').click();
+        check('reducedTrendImmediate',!trend._trendFade&&getComputedStyle(trend).opacity==='1');
+        S.fx.calm=originalCalm;applyMotionPreference();
+      }
+      backToOverview();
+    }
+    await pause(280);
+    await waitUntil(()=>viewBridges.size===0);
+    check('headingBridgeCleansUp',viewBridges.size===0&&!document.querySelector('.view-bridge,.head-bridging')&&document.activeElement.matches('#agents .agent'));
+    check('overviewRestoresScroll',Math.abs(scrollY-(S.returnScroll||0))<2);
+    openAgent(ids[0]);backToOverview();openAgent(ids[1]);S.fx.calm=true;applyMotionPreference();
+    check('headingBridgeCancelsForReducedMotion',viewBridges.size===0&&!document.querySelector('.view-bridge,.head-bridging'));
+    backToOverview();S.fx.calm=originalCalm;applyMotionPreference();
+    for(const range of ['today','7d','30d','all']){
+      document.querySelector('#rangePills button[data-range="'+range+'"]').click();
+      check('range-'+range,S.range.key===range&&!!document.querySelector('#rangePills .selection-indicator'));
+    }
+    document.querySelector('#rangePills button[data-range="custom"]').click();
+    check('dateDialogFocus',document.querySelector('#customMask').contains(document.activeElement));
+    document.querySelector('#dateFrom').value='2020-01-01';document.querySelector('#dateTo').value='2020-01-02';
+    document.querySelector('#dateApply').click();
+    check('customEmptyRange',S.range.key==='custom'&&document.querySelector('#heroTotal').textContent==='0');
+    setRange('all');
+    document.querySelector('#btnPricing').focus();document.querySelector('#btnPricing').click();
+    check('pricingDialog',document.querySelector('#pricingMask').classList.contains('on')&&document.querySelectorAll('#priceRows input').length>0);
+    const input=document.querySelector('#priceRows input');input.value='0.123';
+    const model=input.dataset.m,key=input.dataset.k;
+    await savePricing();
+    const persisted=(await fetchJSON('/api/pricing')).body;
+    check('pricingSaved',persisted[model][key]===0.123&&!document.querySelector('#pricingMask').classList.contains('on'));
+    await fetchJSON('/api/pricing',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(originalPricing)});
+    S.pricing=originalPricing;
+    document.querySelector('#btnTweaks').click();document.querySelector('#tgCalm').click();
+    check('motionPreference',document.body.classList.contains('calm')===S.fx.calm);
+    S.fx.calm=originalCalm;localStorage.setItem('token-viewer-calm',String(originalCalm));applyMotionPreference();setTweaks(false);
+    document.querySelector('#btnPricing').focus();document.querySelector('#btnPricing').click();
+    dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+    check('escapeAndFocus',!document.querySelector('#pricingMask').classList.contains('on')&&document.activeElement.id==='btnPricing');
+    await refresh();
+    check('refresh',!document.querySelector('#btnRefresh').disabled&&!document.querySelector('#btnRefresh').classList.contains('spin'));
+    check('refreshDeltaFeedback',/今日新增|今日用量无变化|今日用量校正/.test(document.querySelector('#refreshDelta').textContent));
+    document.querySelector('#recentMetric [data-metric="cost"]').click();document.querySelector('#recentMetric [data-metric="tokens"]').click();
+    S.fx.calm=true;applyMotionPreference();
+    check('recentReducedMotionSettles',uiAnimationRuns.size===0);
+    S.fx.calm=originalCalm;applyMotionPreference();setRange('today');scrollTo({top:0,behavior:'instant'});
+    await pause(300);
+    return checks;
+  })()`);
+  checks.nativeMenuBarRemoved = !window.isMenuBarVisible();
+  checks.windowCanExpand = window.isResizable() && window.isMaximizable();
+  if (!checks.nativeMenuBarRemoved || !checks.windowCanExpand) throw new Error('桌面窗口配置验收失败');
+  const { ipcMain } = require('electron');
+  let menuRequested = false;
+  const listener = (event) => { menuRequested = event.sender === contents; };
+  ipcMain.once('token-viewer:menu', listener);
+  await contents.executeJavaScript('document.querySelector("#desktopMenu").click()');
+  await new Promise(r=>setTimeout(r,100));
+  appMenu.closePopup(window);
+  ipcMain.removeListener('token-viewer:menu', listener);
+  checks.desktopMenuWorks = menuRequested;
+  if (!menuRequested) throw new Error('桌面菜单 IPC 验收失败');
+  const resize = async (width, height) => {
+    if (window.isFullScreen()) window.setFullScreen(false);
+    if (window.isMaximized()) window.unmaximize();
+    for (let attempt=0;attempt<3;attempt++) {
+      window.setBounds({x:20,y:20,width,height},false);
+      await new Promise(r=>setTimeout(r,300));
+      const current=window.getBounds();
+      if(Math.abs(current.width-width)<3&&Math.abs(current.height-height)<3)return;
+    }
+    throw new Error('验收窗口未进入目标尺寸：'+JSON.stringify({width,height,actual:window.getBounds(),maximized:window.isMaximized(),fullscreen:window.isFullScreen()}));
+  };
+  try {
+    await resize(1760,960);
+    const wide = await contents.executeJavaScript('({shell:document.querySelector(".shell").getBoundingClientRect().width,scroll:document.documentElement.scrollWidth,width:innerWidth})');
+    checks.wideLayout = wide.shell > 1400 && wide.scroll <= wide.width;
+    const fs=require('node:fs');
+    await contents.executeJavaScript('setRange("all");scrollToModelRanking("instant")');
+    await new Promise(r=>setTimeout(r,280));
+    fs.writeFileSync(process.env.TOKEN_VIEWER_SMOKE_REPORT.replace(/\.json$/i,'')+'-models.png',(await contents.capturePage()).toPNG());
+    await contents.executeJavaScript('setRange("today");scrollTo({top:0,behavior:"instant"})');
+    for(const width of [820,960]) {
+      await resize(width,900);
+      const half=await contents.executeJavaScript('({width:innerWidth,scroll:document.documentElement.scrollWidth,bottom:document.querySelector("#agents .agent").getBoundingClientRect().bottom,height:innerHeight,rank:getComputedStyle(document.querySelector("#donutLegend")).display,donut:getComputedStyle(document.querySelector("#donutBox")).display})');
+      checks['halfScreen'+width]=half.scroll<=half.width&&half.bottom<=half.height&&half.rank==='grid'&&half.donut==='none';
+      const screenshot=await contents.capturePage();
+      fs.writeFileSync(process.env.TOKEN_VIEWER_SMOKE_REPORT.replace(/\.json$/i,'')+'-half-'+width+'.png',screenshot.toPNG());
+      if(!checks['halfScreen'+width])throw new Error('半屏验收失败：'+JSON.stringify(half));
+      await contents.executeJavaScript('document.querySelector(\'#recentMetric [data-metric="cost"]\').click()');
+      checks['halfCostMode'+width]=await contents.executeJavaScript('document.documentElement.scrollWidth<=innerWidth&&document.querySelector("#agents .agent").getBoundingClientRect().bottom<=innerHeight');
+      if(!checks['halfCostMode'+width])throw new Error('半屏成本视图溢出');
+      await contents.executeJavaScript('document.querySelector(\'#recentMetric [data-metric="tokens"]\').click()');
+      checks['halfRankingControls'+width]=await contents.executeJavaScript('(()=>{setRange("all");scrollToModelRanking("instant");const top=document.querySelector("#topbar").getBoundingClientRect().bottom;return document.documentElement.scrollWidth<=innerWidth&&[...document.querySelectorAll("#modelRankRangePills button,#modelRankMore")].filter(b=>!b.hidden).every(b=>{const r=b.getBoundingClientRect();return r.top>=top&&r.bottom<=innerHeight&&b.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2))})})()');
+      if(!checks['halfRankingControls'+width])throw new Error('半屏排名操作栏命中失败');
+      await contents.executeJavaScript('setRange("today");scrollTo({top:0,behavior:"instant"})');
+    }
+    await resize(390,800);
+    const narrow = await contents.executeJavaScript('({scroll:document.documentElement.scrollWidth,width:innerWidth,menuRight:document.querySelector("#desktopMenu").getBoundingClientRect().right,controlArea:navigator.windowControlsOverlay.getTitlebarAreaRect().width})');
+    checks.narrowLayout = narrow.scroll <= narrow.width && narrow.menuRight < narrow.controlArea;
+    checks.narrowRecentChart = await contents.executeJavaScript('document.querySelector("#recentBars").getBoundingClientRect().width>document.querySelector(".recent").getBoundingClientRect().width*.8&&document.querySelector("#recentBars").getBoundingClientRect().right<=innerWidth');
+    await contents.executeJavaScript('scrollToModelRanking("instant")');
+    await new Promise(r=>setTimeout(r,180));
+    checks.narrowModelRanking=await contents.executeJavaScript('document.documentElement.scrollWidth<=innerWidth&&[...document.querySelectorAll("#modelRankList li")].every(el=>el.getBoundingClientRect().right<=innerWidth)&&document.querySelector("#modelRankingTitle").getBoundingClientRect().top>document.querySelector("#topbar").getBoundingClientRect().bottom');
+    checks.narrowRankingControls=await contents.executeJavaScript('(()=>{const top=document.querySelector("#topbar").getBoundingClientRect().bottom;return [...document.querySelectorAll("#modelRankRangePills button,#modelRankMore")].filter(b=>!b.hidden).every(b=>{const r=b.getBoundingClientRect();return r.top>=top&&r.bottom<=innerHeight&&r.left>=0&&r.right<=innerWidth&&b.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2))})})()');
+    if(!checks.narrowRankingControls)throw new Error('窄屏排名操作栏命中失败');
+    fs.writeFileSync(process.env.TOKEN_VIEWER_SMOKE_REPORT.replace(/\.json$/i,'')+'-models-narrow.png',(await contents.capturePage()).toPNG());
+    await contents.executeJavaScript('scrollTo({top:0,behavior:"instant"})');
+    if(!checks.narrowModelRanking)throw new Error('窄屏模型排名溢出');
+    if (!checks.narrowRecentChart) throw new Error('窄屏七日趋势被挤压');
+    if (!checks.wideLayout || !checks.narrowLayout) throw new Error('窗口宽度验收失败：'+JSON.stringify({wide,narrow}));
+    contents.debugger.attach('1.3');
+    await contents.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
+    checks.systemReducedMotion = await contents.executeJavaScript('(async()=>{const limit=Date.now()+1800;while(!(matchMedia("(prefers-reduced-motion: reduce)").matches&&document.body.classList.contains("calm"))&&Date.now()<limit)await new Promise(r=>setTimeout(r,40));return matchMedia("(prefers-reduced-motion: reduce)").matches&&document.body.classList.contains("calm")})()');
+    if (!checks.systemReducedMotion) {
+      const diagnostic=await contents.executeJavaScript('({matches:matchMedia("(prefers-reduced-motion: reduce)").matches,cached:reducedMotion.matches,calm:document.body.classList.contains("calm"),visibility:document.visibilityState,focus:document.hasFocus()})');
+      throw new Error('系统减少动态效果验收失败：'+JSON.stringify(diagnostic));
+    }
+  } finally {
+    if (contents.debugger.isAttached()) {
+      await contents.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[]});
+      contents.debugger.detach();
+    }
+    window.setBounds(bounds);
+    await new Promise(r=>setTimeout(r,350));
+  }
+  return checks;
+};

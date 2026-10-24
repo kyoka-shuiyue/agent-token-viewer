@@ -1,23 +1,112 @@
 {
   "name": "agent-token-viewer",
-  "version": "1.0.0",
-  "description": "Local-first token usage viewer for AI coding agents — Proma, Pi, oh-my-Pi, Claude Code, Claude Desktop, Codex, ZCode, DeepSeek Harness, OpenCode, Qoder. Zero dependencies.",
+  "version": "1.4.1",
+  "description": "Local-first Agent token usage viewer with a zero-dependency scanner and an Electron desktop app.",
   "license": "MIT",
   "private": false,
   "type": "commonjs",
-  "bin": { "agent-token-viewer": "./server.js" },
+  "main": "desktop/main.cjs",
+  "bin": {
+    "agent-token-viewer": "./server.js"
+  },
   "scripts": {
     "start": "node server.js",
     "scan": "node server.js --once",
-    "doctor": "node server.js --doctor"
+    "doctor": "node server.js --doctor",
+    "test": "node --test",
+    "desktop": "electron .",
+    "prepare:runtime": "node scripts/prepare-runtime.cjs",
+    "build:desktop": "npm run prepare:runtime && electron-builder --win nsis --x64"
   },
-  "engines": { "node": ">=22.15" },
-  "os": [ "darwin", "linux", "win32" ],
-  "keywords": [
-    "token-usage", "llm-usage", "claude-code", "codex", "opencode", "proma",
-    "deepseek-harness", "zcode", "pi-agent", "qoder", "observability", "local-first", "zero-dependency"
+  "engines": {
+    "node": ">=22.15"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
   ],
-  "repository": { "type": "git", "url": "git+https://github.com/kyoka-shuiyue/agent-token-viewer.git" },
-  "bugs": { "url": "https://github.com/kyoka-shuiyue/agent-token-viewer/issues" },
-  "homepage": "https://github.com/kyoka-shuiyue/agent-token-viewer#readme"
+  "keywords": [
+    "token-usage",
+    "llm-usage",
+    "claude-code",
+    "codex",
+    "opencode",
+    "mirage",
+    "deepseek-harness",
+    "zcode",
+    "pi-agent",
+    "qoder",
+    "observability",
+    "local-first",
+    "zero-dependency"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kyoka-shuiyue/agent-token-viewer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kyoka-shuiyue/agent-token-viewer/issues"
+  },
+  "homepage": "https://github.com/kyoka-shuiyue/agent-token-viewer#readme",
+  "devDependencies": {
+    "electron": "44.7.0",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "com.agenttokenviewer.desktop",
+    "productName": "Token Viewer",
+    "asar": true,
+    "electronDist": "node_modules/electron/dist",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "desktop/**/*",
+      "package.json",
+      "LICENSE"
+    ],
+    "extraResources": [
+      {
+        "from": "server.js",
+        "to": "backend/server.js"
+      },
+      {
+        "from": "index.html",
+        "to": "backend/index.html"
+      },
+      {
+        "from": "build/runtime",
+        "to": "runtime"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": true,
+      "artifactName": "Token-Viewer-Setup-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Token 查看器",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": false,
+      "installerLanguages": [
+        "zh_CN",
+        "en_US"
+      ]
+    }
+  }
 }

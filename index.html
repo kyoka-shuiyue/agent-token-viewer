@@ -14,7 +14,10 @@
   --card:#FFFFFF;
   --ink:#221D18;
   --ink-2:#6E655B;
-  --ink-3:#A69A8B;
+  --ink-3:#877C6F;
+  --motion-fast:120ms;
+  --motion-ui:220ms;
+  --motion-surface:260ms;
   --line:rgba(34,29,24,.09);
   --line-2:rgba(34,29,24,.17);
   --ember:#D9541F;
@@ -38,9 +41,8 @@
   --font-body:system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;
   --font-num:Georgia,"Palatino Linotype",ui-serif,serif;
 }
-@property --ang{syntax:'<angle>';inherits:false;initial-value:0deg}
 *{margin:0;padding:0;box-sizing:border-box}
-html{scroll-behavior:smooth}
+html{scroll-behavior:auto}
 body{
   background:var(--paper);
   color:var(--ink);
@@ -55,43 +57,32 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
 input{font-family:inherit}
 ::selection{background:rgba(217,84,31,.18)}
 
-/* ============================================================
-   背景层：暖色光斑 + 纸纹 + 顶部流光
-   ============================================================ */
-.aurora{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
-.aurora b{position:absolute;display:block;border-radius:50%;will-change:transform}
-.aurora b:nth-child(1){width:64vw;height:64vw;left:-16vw;top:-24vw;background:radial-gradient(circle,rgba(217,84,31,.13),transparent 63%);animation:drift1 46s ease-in-out infinite}
-.aurora b:nth-child(2){width:56vw;height:56vw;right:-14vw;top:-12vw;background:radial-gradient(circle,rgba(201,138,20,.14),transparent 63%);animation:drift2 56s ease-in-out infinite}
-.aurora b:nth-child(3){width:58vw;height:58vw;left:16vw;bottom:-30vw;background:radial-gradient(circle,rgba(192,92,99,.08),transparent 63%);animation:drift3 64s ease-in-out infinite}
-@keyframes drift1{0%,100%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(5vw,4vw,0) scale(1.07)}}
-@keyframes drift2{0%,100%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(-6vw,5vw,0) scale(1.05)}}
-@keyframes drift3{0%,100%{transform:translate3d(0,0,0) scale(1.03)}50%{transform:translate3d(4vw,-5vw,0) scale(.96)}}
-.noise{
-  position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.3;
-  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='140' height='140' filter='url(%23n)' opacity='.05'/></svg>");
-}
-.sheen{position:fixed;top:0;left:0;right:0;height:2px;z-index:60;pointer-events:none;overflow:hidden;background:rgba(34,29,24,.05)}
-.sheen i{position:absolute;top:0;left:-45%;width:45%;height:100%;will-change:transform;
-  background:linear-gradient(90deg,transparent,rgba(217,84,31,.9) 34%,rgba(201,138,20,.85) 52%,rgba(192,92,99,.6) 68%,transparent);
-  animation:sheen 9s linear infinite}
-.sheen::after{content:"";position:absolute;left:0;right:0;top:0;height:150px;background:linear-gradient(180deg,rgba(217,84,31,.08),transparent 72%)}
-@keyframes sheen{from{transform:translate3d(0,0,0)}to{transform:translate3d(330%,0,0)}}
+/* 静态暖白背景：让注意力留在读数上。 */
+body{background:radial-gradient(ellipse at 0 0,rgba(217,84,31,.045),transparent 55%),var(--paper)}
 
 /* ============================================================
    布局骨架
    ============================================================ */
-.shell{position:relative;z-index:2;max-width:1400px;margin:0 auto;padding:26px clamp(14px,2.6vw,38px) 80px}
+.shell{position:relative;z-index:2;max-width:1800px;margin:0 auto;padding:26px clamp(14px,2.6vw,42px) 80px}
+.desktop-bar{display:none}
+body.desktop{--desktop-inset:env(titlebar-area-height,44px);padding-top:var(--desktop-inset)}
+body.desktop .desktop-bar{position:fixed;inset:0 0 auto;height:var(--desktop-inset);z-index:120;display:flex;align-items:center;gap:10px;padding:0 max(160px,calc(100vw - env(titlebar-area-width,100vw))) 0 12px;background:var(--paper);-webkit-app-region:drag;user-select:none}
+.desktop-title{font-size:12px;font-weight:600;color:var(--ink-2);white-space:nowrap}
+.desktop-menu{width:30px;height:30px;flex:none;display:grid;place-items:center;border-radius:8px;-webkit-app-region:no-drag;transition:background var(--motion-fast) ease,color var(--motion-fast) ease}
+.desktop-menu:hover{background:var(--paper-2);color:var(--ember)}
+body.desktop .topbar{top:calc(var(--desktop-inset) + 10px)}
+body.desktop .mask,body.desktop #boot{top:var(--desktop-inset)}
 .topbar{
   position:sticky;top:14px;z-index:40;
   display:flex;align-items:center;gap:16px;flex-wrap:wrap;
   padding:12px 14px;margin-bottom:26px;
-  background:rgba(255,255,255,.88);
+  background:rgba(250,246,239,.94);
   border:1px solid var(--line);border-radius:18px;
   backdrop-filter:blur(10px) saturate(150%);-webkit-backdrop-filter:blur(10px) saturate(150%);
   box-shadow:var(--sh-1);
-  transition:box-shadow .4s var(--ease),transform .4s var(--ease),background .4s;
+  transition:box-shadow var(--motion-ui) ease,background var(--motion-ui) ease;
 }
-.topbar.scrolled{box-shadow:var(--sh-2);background:rgba(255,255,255,.94)}
+.topbar.scrolled{box-shadow:var(--sh-1);background:var(--paper)}
 .brand{display:flex;align-items:center;gap:12px;min-width:0}
 .brand .mark{
   width:40px;height:40px;border-radius:13px;flex:none;position:relative;display:grid;place-items:center;
@@ -133,31 +124,20 @@ input{font-family:inherit}
 svg.i{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
 
 /* ============================================================
-   卡片：白底 + 3D 悬停 + 跟随高光 + 流光描边
+   卡片与操作反馈
    ============================================================ */
 .card{
   position:relative;overflow:hidden;background:var(--card);
   border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh-1);padding:22px;
 }
-/* 跟随光标的高光 */
-.card::before{
-  content:"";position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .45s var(--ease);
-  background:radial-gradient(340px circle at var(--mx,50%) var(--my,0%),rgba(217,84,31,.09),rgba(201,138,20,.04) 42%,transparent 66%);
+/* 只有可操作卡片有反馈；图表与指标卡保持稳定。 */
+.agent{transition:border-color var(--motion-ui) ease,box-shadow var(--motion-ui) ease,transform var(--motion-ui) var(--ease-out)}
+.agent:active{transform:scale(.985)}
+@media (hover:hover) and (pointer:fine){
+  .agent:hover{transform:translateY(-5px);border-color:rgba(217,84,31,.48);box-shadow:0 6px 14px -8px rgba(217,84,31,.22),0 24px 42px -22px rgba(34,29,24,.36)}
+  .agent:hover:active{transform:translateY(-1px) scale(.985)}
+  .agent:hover .logo{transform:scale(1.08) rotate(-3deg)}
 }
-/* 旋转流光描边 */
-.card::after{
-  content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;transition:opacity .5s var(--ease);
-  padding:1.2px;
-  background:conic-gradient(from var(--ang,0deg),transparent 0 52%,rgba(217,84,31,.55) 66%,rgba(201,138,20,.6) 74%,rgba(192,92,99,.35) 82%,transparent 92%);
-  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
-  -webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;
-}
-.card:hover::before{opacity:1}
-.card:hover::after{opacity:1;animation:orbit 3.4s linear infinite}
-@keyframes orbit{to{--ang:360deg}}
-.tilt{transform:perspective(900px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg)) translate3d(var(--tx,0),calc(var(--ty,0px) + var(--lift,0px)),0);transition:transform .22s var(--ease-out),box-shadow .4s var(--ease)}
-.tilt:hover{--lift:-6px;box-shadow:var(--sh-2)}
-.tilt.press{transform:perspective(900px) scale(.985)}
 
 .section-title{display:flex;align-items:baseline;gap:12px;margin:34px 6px 15px}
 .section-title h2{font-size:15.5px;font-weight:650;letter-spacing:-.01em}
@@ -197,9 +177,8 @@ svg.i{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.75;str
 .agent .logo{
   width:38px;height:38px;border-radius:13px;flex:none;display:grid;place-items:center;
   font-family:var(--font-display);font-size:12.5px;font-weight:700;color:#fff;letter-spacing:-.02em;
-  box-shadow:0 6px 16px -9px currentColor;transition:transform .4s var(--ease-back)
+  box-shadow:0 6px 16px -9px currentColor;transition:transform .4s var(--ease-out)
 }
-.agent:hover .logo{transform:scale(1.08) rotate(-4deg)}
 .agent .name{font-size:14.5px;font-weight:650;line-height:1.3}
 .agent .path{font-size:11px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px}
 .agent .val{font-family:var(--font-num);font-variant-numeric:lining-nums tabular-nums;font-size:27px;font-weight:400;margin-top:16px;letter-spacing:-.03em;line-height:1.1}
@@ -207,56 +186,11 @@ svg.i{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.75;str
 .agent .row{display:flex;justify-content:space-between;font-size:11.5px;color:var(--ink-3);margin-top:8px}
 .agent .row b{color:var(--ink-2);font-weight:600;font-family:var(--font-num)}
 .sharebar{height:5px;border-radius:99px;background:var(--paper-2);margin-top:14px;overflow:hidden}
-.sharebar i{display:block;height:100%;border-radius:99px;transform-origin:left;transition:transform 1.1s var(--ease)}
+.sharebar i{display:block;height:100%;border-radius:99px;transform-origin:left;transition:none}
 .agent .spark{margin-top:12px}
 .agent.empty{opacity:.62}
 .agent.empty .val{color:var(--ink-3)}
 .badge{font-size:10.5px;padding:3px 9px;border-radius:var(--r-pill);background:var(--paper-2);color:var(--ink-3);border:1px solid var(--line)}
-
-/* ============================================================
-   总览 · 模型排行
-   ============================================================ */
-.rank-head{margin-bottom:4px}
-.rank-note{font-size:11.5px;color:var(--ink-3);margin:-6px 0 10px;line-height:1.5}
-.rank-note b{color:var(--ink-2);font-weight:600;font-family:var(--font-num)}
-.mr-row{
-  display:grid;align-items:center;gap:0 12px;padding:11px 2px 12px;
-  grid-template-columns:26px minmax(0,1.35fr) minmax(72px,2.2fr) minmax(88px,auto);
-  grid-template-areas:"rank name bar val" ". comp comp comp" ". sub sub sub";
-  border-bottom:1px dashed var(--line);transition:background .25s;
-}
-.mr-row:last-child{border-bottom:0}
-.mr-row:hover{background:var(--paper)}
-.mr-rank{grid-area:rank;font-family:var(--font-num);font-variant-numeric:lining-nums tabular-nums;font-size:12.5px;color:var(--ink-3);text-align:center}
-.mr-row.top3 .mr-rank{color:var(--ember);font-weight:700}
-.mr-name{grid-area:name;min-width:0;display:flex;align-items:center;gap:7px}
-.mr-name .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;font-weight:600;color:var(--ink)}
-.mr-name .alias{
-  flex:none;font-size:10px;line-height:1;padding:3px 6px;border-radius:var(--r-pill);
-  background:var(--paper-2);border:1px solid var(--line);color:var(--ink-3);cursor:help;font-family:var(--font-num)
-}
-.mr-bar{grid-area:bar;position:relative;height:11px;border-radius:99px;background:var(--paper-2);overflow:hidden}
-.mr-bar i{
-  display:block;height:100%;border-radius:99px;
-  width:var(--w,0%);
-  /* 基准宽度就是目标值，动画只负责从 0 长出来：
-     这样在后台标签页里动画被暂停时，条形仍然正确显示（rAF+transition 会空留 0 宽）*/
-  animation:mrgrow 1.05s var(--ease)
-}
-@keyframes mrgrow{from{width:0}}
-.mr-val{grid-area:val;font-family:var(--font-num);font-variant-numeric:lining-nums tabular-nums;font-size:13px;color:var(--ink);white-space:nowrap;text-align:right}
-.mr-val em{font-style:normal;font-size:11px;color:var(--ink-3);margin-left:7px}
-.mr-comp{grid-area:comp;display:flex;height:4px;border-radius:99px;overflow:hidden;margin-top:8px;background:transparent}
-.mr-comp b{display:block;height:100%}
-.mr-sub{grid-area:sub;display:flex;flex-wrap:wrap;gap:4px 13px;margin-top:7px;font-size:11px;color:var(--ink-3);line-height:1.6}
-.mr-sub span{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
-.mr-sub b{color:var(--ink-2);font-weight:600;font-family:var(--font-num);font-variant-numeric:lining-nums tabular-nums}
-.mr-sub .sw{width:6px;height:6px;border-radius:50%;flex:none;background:currentColor}
-.mr-sub .adot{width:7px;height:7px;border-radius:2.5px;flex:none;background:currentColor}
-.mr-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:11.5px;color:var(--ink-3)}
-.mr-foot .link{color:var(--ember);cursor:pointer;font-weight:600}
-.mr-foot .link:hover{text-decoration:underline}
-.mr-empty{padding:28px 0;text-align:center;font-size:12.5px;color:var(--ink-3)}
 
 /* ============================================================
    图表
@@ -311,21 +245,18 @@ table.data td .sub{font-size:10.5px;color:var(--ink-3);margin-top:2px}
 /* ============================================================
    加载屏
    ============================================================ */
-#boot{position:fixed;inset:0;z-index:100;display:grid;place-items:center;background:var(--paper);transition:opacity .6s var(--ease),visibility .6s}
+#boot{position:fixed;inset:0;z-index:100;display:grid;place-items:center;background:var(--paper);transition:opacity var(--motion-ui) var(--ease),visibility var(--motion-ui)}
 #boot.gone{opacity:0;visibility:hidden}
 .boot-inner{width:min(480px,86vw);text-align:center;position:relative;z-index:2}
 .boot-inner .mark{
   width:58px;height:58px;border-radius:19px;margin:0 auto 22px;position:relative;
   background:linear-gradient(140deg,var(--ember-2),var(--amber));
   box-shadow:0 14px 34px -14px rgba(217,84,31,.7);
-  animation:breathe 3.2s var(--ease) infinite;
 }
-@keyframes breathe{0%,100%{transform:scale(1);box-shadow:0 14px 34px -14px rgba(217,84,31,.6)}50%{transform:scale(1.07);box-shadow:0 22px 46px -14px rgba(201,138,20,.75)}}
 .boot-inner h2{font-family:var(--font-display);font-size:18px;font-weight:400;letter-spacing:-.01em;margin-bottom:6px}
 .boot-inner p{font-size:12.5px;color:var(--ink-3);min-height:20px}
 .bar{height:6px;border-radius:99px;background:var(--paper-2);overflow:hidden;margin-top:24px;box-shadow:inset 0 1px 2px rgba(34,29,24,.06)}
-.bar i{display:block;height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,var(--ember),var(--amber),var(--rose));background-size:200% 100%;animation:flowbar 2.4s linear infinite;transition:width .5s var(--ease)}
-@keyframes flowbar{from{background-position:200% 0}to{background-position:-200% 0}}
+.bar i{display:block;height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,var(--ember),var(--amber));transition:width var(--motion-ui) var(--ease)}
 .scanlist{margin-top:18px;display:flex;flex-wrap:wrap;gap:7px;justify-content:center}
 .scanlist span{font-size:11px;color:var(--ink-3);padding:4px 11px;border-radius:999px;background:var(--card);border:1px solid var(--line);transition:.45s var(--ease)}
 .scanlist span.ok{color:var(--sage);border-color:rgba(111,130,101,.4);background:rgba(111,130,101,.08)}
@@ -334,10 +265,11 @@ table.data td .sub{font-size:10.5px;color:var(--ink-3);margin-top:2px}
 /* ============================================================
    弹层 / 提示 / 微调
    ============================================================ */
-.mask{position:fixed;inset:0;z-index:80;background:rgba(34,29,24,.30);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);display:none;align-items:flex-start;justify-content:center;padding:6vh 16px 4vh;overflow:auto;opacity:0;transition:opacity .35s var(--ease)}
-.mask.on{display:flex;opacity:1}
-.modal{width:min(900px,96vw);padding:26px;background:var(--card);border-radius:26px;border:1px solid var(--line);box-shadow:0 40px 80px -40px rgba(34,29,24,.5);animation:pop .5s var(--ease) both}
-@keyframes pop{from{opacity:0;transform:translateY(18px) scale(.97)}}
+.mask{position:fixed;inset:0;z-index:80;background:rgba(34,29,24,.30);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);display:flex;align-items:flex-start;justify-content:center;padding:6vh 16px 4vh;overflow:auto;opacity:0;visibility:hidden;pointer-events:none;transition:opacity var(--motion-surface) var(--ease-out),visibility 0s linear var(--motion-surface)}
+.mask.on{opacity:1;visibility:visible;pointer-events:auto;transition-delay:0s}
+.modal{width:min(900px,96vw);padding:26px;background:var(--card);border-radius:26px;border:1px solid var(--line);box-shadow:0 40px 80px -40px rgba(34,29,24,.5);opacity:0;transform:translateY(18px) scale(.96);transition:opacity var(--motion-surface) var(--ease-out),transform var(--motion-surface) var(--ease-out)}
+.mask.on .modal{opacity:1;transform:none}
+body.dialog-open{overflow:hidden}
 .modal h3{font-family:var(--font-display);font-size:17px;font-weight:400;margin-bottom:5px}
 .modal .desc{font-size:12px;color:var(--ink-3);margin-bottom:20px;line-height:1.6}
 .price-row{display:grid;grid-template-columns:minmax(0,1.7fr) repeat(4,minmax(0,.62fr));gap:9px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
@@ -353,15 +285,15 @@ table.data td .sub{font-size:10.5px;color:var(--ink-3);margin-top:2px}
 .btn.primary:hover{box-shadow:0 16px 30px -12px rgba(217,84,31,.95)}
 .btn:active{transform:translateY(0) scale(.97)}
 .tweaks{position:fixed;right:22px;bottom:22px;z-index:70;display:flex;flex-direction:column;align-items:flex-end;gap:10px}
-.tweak-panel{display:none;padding:18px 20px;width:250px;background:var(--card);border:1px solid var(--line);border-radius:20px;box-shadow:var(--sh-2);animation:pop .4s var(--ease) both}
-.tweak-panel.on{display:block}
+.tweak-panel{visibility:hidden;pointer-events:none;opacity:0;transform:translateY(12px) scale(.95);transform-origin:bottom right;padding:18px 20px;width:250px;background:var(--card);border:1px solid var(--line);border-radius:20px;box-shadow:var(--sh-2);transition:opacity var(--motion-ui) var(--ease-out),transform var(--motion-ui) var(--ease-out),visibility 0s linear var(--motion-ui)}
+.tweak-panel.on{visibility:visible;pointer-events:auto;opacity:1;transform:none;transition-delay:0s}
 .tweak-panel .t{font-size:12.5px;font-weight:650;margin-bottom:14px}
 .tweak-row{display:flex;align-items:center;justify-content:space-between;margin-top:11px;font-size:12.5px;color:var(--ink-2)}
-.switch{width:40px;height:22px;border-radius:99px;background:var(--paper-2);border:1px solid var(--line);position:relative;transition:.35s var(--ease)}
-.switch i{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(34,29,24,.28);transition:.35s var(--ease-back)}
+.switch{width:40px;height:22px;border-radius:99px;background:var(--paper-2);border:1px solid var(--line);position:relative;transition:background var(--motion-ui) ease}
+.switch i{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(34,29,24,.28);transition:transform var(--motion-ui) var(--ease-out)}
 .switch.on{background:linear-gradient(120deg,var(--ember),var(--amber));border-color:transparent}
-.switch.on i{left:20px}
-#toast{position:fixed;left:50%;bottom:28px;transform:translate(-50%,22px);z-index:90;opacity:0;transition:.45s var(--ease);pointer-events:none}
+.switch.on i{transform:translateX(18px)}
+#toast{position:fixed;left:50%;bottom:28px;transform:translate(-50%,12px);z-index:90;opacity:0;transition:opacity var(--motion-surface) var(--ease-out),transform var(--motion-surface) var(--ease-out);pointer-events:none;max-width:min(90vw,520px)}
 #toast.on{opacity:1;transform:translate(-50%,0)}
 #toast .in{padding:11px 20px;border-radius:var(--r-pill);font-size:12.5px;background:var(--ink);color:var(--paper);box-shadow:0 20px 40px -18px rgba(34,29,24,.6)}
 .tip{position:fixed;z-index:75;pointer-events:none;opacity:0;transition:opacity .2s;font-size:11.5px;padding:8px 12px;border-radius:11px;background:var(--card);border:1px solid var(--line-2);box-shadow:var(--sh-2);white-space:nowrap;line-height:1.5}
@@ -372,22 +304,90 @@ footer{margin-top:46px;padding-top:22px;border-top:1px solid var(--line-2);font-
 .src{font-size:11.5px;color:var(--ink-3);display:flex;align-items:center;gap:8px}
 .src .dot{width:7px;height:7px;border-radius:50%;flex:none}
 .src b{color:var(--ink-2);font-weight:600}
+.source-panel{height:0;opacity:0;overflow:hidden;transition:opacity 140ms var(--ease-out)}
+.source-panel[aria-hidden="true"]{pointer-events:none}
+.rankbar{display:none}
+.model-ranking{margin-top:26px;scroll-margin-top:110px;overflow:visible}
+.model-rank-sticky{position:sticky;top:var(--model-rank-sticky-top,100px);z-index:20;margin:-22px -22px 14px;padding:14px 22px 12px;background:rgba(255,255,255,.97);border-bottom:1px solid var(--line);border-radius:var(--r) var(--r) 14px 14px;backdrop-filter:blur(10px) saturate(145%);-webkit-backdrop-filter:blur(10px) saturate(145%)}
+.model-ranking .card-head{flex-wrap:nowrap;gap:12px;margin-bottom:0;min-width:0}
+.model-rank-head-main{min-width:0}
+.model-ranking .card-head h3{font-size:17px}
+.model-ranking .meta{display:block;margin:2px 0 0;font-size:11px}
+.model-ranking h3:focus{outline:3px solid rgba(217,84,31,.35);outline-offset:4px;border-radius:4px}
+.model-rank-controls{display:flex;align-items:center;gap:8px;margin-top:10px;min-width:0}
+.model-rank-pills{flex:1 1 auto;min-width:0;flex-wrap:nowrap;gap:2px;padding:3px;border-radius:13px}
+.model-rank-pills .pill{flex:1 1 0;min-width:0;min-height:34px;padding:6px 7px;font-size:11px;text-align:center}
+.model-more{flex:none;min-width:40px;min-height:36px;padding:7px 12px;border:1px solid rgba(217,84,31,.24);border-radius:var(--r-pill);background:rgba(217,84,31,.055);color:var(--ember);font-size:12px;line-height:1.2;white-space:nowrap;transition:color var(--motion-fast) ease,border-color var(--motion-fast) ease,background var(--motion-fast) ease,transform var(--motion-fast) var(--ease-out)}
+.model-more[hidden]{display:none}
+.model-more:active{transform:scale(.97)}
+@media (hover:hover) and (pointer:fine){.model-more:hover{background:rgba(217,84,31,.10);border-color:rgba(217,84,31,.42)}}
+.model-ranking .rank-note{font-size:11px;color:var(--ink-3);margin:0 0 12px;line-height:1.6}
+.model-rank-viewport{overflow:hidden;min-width:0}
+.model-rank-list{list-style:none;margin:0;padding:0}
+.model-rank-row{display:grid;grid-template-columns:24px minmax(150px,1fr) minmax(50px,1fr) 112px;gap:16px;align-items:center;padding:12px 0;border-top:1px solid var(--line);position:relative}
+.model-place{font:italic 18px Georgia,serif;color:var(--ink-3)}
+.model-rank-row:nth-child(-n+3) .model-place{color:var(--ember)}
+.model-identity{min-width:0}.model-name{font-size:12px;font-weight:600;overflow-wrap:anywhere;line-height:1.5}
+.model-origins{display:flex;gap:3px 7px;flex-wrap:wrap;margin-top:4px}
+.model-origin{font-size:10px;color:var(--ink-3);border-radius:4px;white-space:nowrap}
+.model-origin:hover{color:var(--ember)}.model-origin:active{opacity:.6}
+.model-track{height:7px;background:var(--paper-2);border-radius:99px;overflow:hidden}
+.model-fill{display:block;width:100%;height:100%;border-radius:inherit;transform-origin:left center;background:linear-gradient(90deg,var(--ember),var(--amber))}
+.model-amount{text-align:right;font:23px Georgia,serif;white-space:nowrap;line-height:1.2}
+.model-amount small{display:block;font:10px var(--font-sans, sans-serif);color:var(--ink-3);margin-top:4px}
+.model-rank-footer{display:flex;align-items:center;justify-content:flex-start;gap:12px;border-top:1px solid var(--line);padding-top:14px;margin-top:8px;font-size:11px;color:var(--ink-3)}
+.ranking-jump{color:var(--ember);font-size:12px;border-radius:6px;padding:4px 6px}
+.ranking-jump:active{opacity:.65}
+.agent-nav{display:flex;gap:10px;align-items:center}
+@media(max-width:640px){.model-rank-sticky{margin:-18px -18px 12px;padding:12px 18px 10px}.model-ranking .card-head{gap:8px}.model-ranking .card-head h3{font-size:15px}.model-rank-controls{gap:6px;margin-top:9px}.model-rank-pills{gap:0;padding:3px}.model-rank-pills .pill{padding:6px 3px;font-size:10.5px}.model-more{min-height:36px;padding:6px 9px;font-size:11px}.model-rank-row{grid-template-columns:20px minmax(0,1fr) 86px;gap:9px}.model-track{grid-column:2;grid-row:auto;margin-top:-5px}.model-amount{grid-column:3;grid-row:1 / span 2;font-size:21px}.agent-nav{gap:4px}.model-ranking{padding:18px!important}.model-rank-row{align-items:start}.model-amount small{line-height:1.5}}
 
 /* ============================================================
    入场与切换动效
    ============================================================ */
-.reveal{animation:rise .8s var(--ease-out) both;animation-delay:calc(var(--i,0)*60ms)}
-@keyframes rise{from{opacity:0;transform:translateY(22px) scale(.985)}}
-.view-in{animation:viewIn .6s var(--ease-out) both}
-@keyframes viewIn{from{opacity:0;transform:translateY(16px) scale(.99)}}
-.spark path.line{stroke-dasharray:var(--len,1200);stroke-dashoffset:var(--len,1200);transition:stroke-dashoffset 1.2s var(--ease) .15s}
-.spark.go path.line{stroke-dashoffset:0}
-.bar-rect{transform-box:fill-box;transform-origin:bottom}
-.hbar-track{fill:rgba(34,29,24,.055)}
-body.calm *{animation-duration:.001s!important;animation-delay:0s!important;transition-duration:.001s!important}
-body.calm .sheen,body.calm .aurora b{animation:none}
-body.calm .tilt:hover{transform:none}
-body.nofx .tilt{transform:none!important}
+/* 状态切换只用短促反馈，数据图表立即呈现。 */
+.pills,.seg{position:relative;isolation:isolate}
+.selection-indicator{position:absolute;top:0;left:0;border-radius:inherit;pointer-events:none;z-index:0;background:var(--card);box-shadow:var(--sh-1);transition:transform var(--motion-ui) var(--ease-out)}
+.pills .selection-indicator{background:linear-gradient(120deg,var(--ember),var(--amber))}
+.pill,.seg button{z-index:1;position:relative;transition:color var(--motion-fast) ease,transform var(--motion-fast) var(--ease-out)}
+.pill.on{background:transparent;box-shadow:none}
+.seg button.on{background:transparent;box-shadow:none}
+.pill:active,.seg button:active{transform:scale(.97)}
+.chip{transition:border-color var(--motion-fast) ease,background var(--motion-fast) ease}
+.chip:hover{transform:none;box-shadow:none}
+.icon-btn,.btn,.back{transition:color var(--motion-fast) ease,border-color var(--motion-fast) ease,background var(--motion-fast) ease,box-shadow var(--motion-ui) ease,transform var(--motion-ui) var(--ease-out)}
+.icon-btn:hover,.btn:hover,.back:hover{transform:none;box-shadow:var(--sh-1)}
+@media (hover:hover) and (pointer:fine){
+  .icon-btn:hover,.btn:hover{transform:translateY(-2px);box-shadow:var(--sh-2)}
+  .back:hover{transform:translateX(-4px)}
+}
+.icon-btn:active,.btn:active,.back:active{transform:scale(.97)}
+button:focus-visible,.agent:focus-visible,input:focus-visible{outline:3px solid rgba(217,84,31,.45);outline-offset:3px}
+button:disabled{cursor:wait;opacity:.6}
+.tiles .card{padding:20px 22px}
+.tile .rail{display:none}
+.tile .v{font-size:32px;margin-top:9px}
+.label{font-size:11.5px;letter-spacing:.025em;text-transform:none}
+.agent .path{max-width:none;font-size:12px}
+.agent .top{align-items:flex-start}
+.agent .name{line-height:1.45}
+.agent .open-arrow{font-size:17px;color:var(--ink-3);margin-left:auto;transition:transform var(--motion-ui) var(--ease-out)}
+@media (hover:hover) and (pointer:fine){.agent:hover .open-arrow{transform:translateX(6px);color:var(--ember)}}
+table.data td:first-child{min-width:200px;max-width:420px}
+table.data td:first-child b{display:block;overflow-wrap:anywhere;line-height:1.6}
+.card-head h3{font-size:15px}
+.hint-row{margin-top:22px;gap:10px 20px}
+.section-title{justify-content:space-between}
+.agent.error{border-color:rgba(192,92,99,.5)}
+.source-details{width:100%;margin-top:8px}
+.source-details summary{cursor:pointer;color:var(--ink-2);font-size:12px;list-style:none}
+.source-details summary::before{content:'＋';margin-right:7px}
+.source-details[open] summary::before{content:'−'}
+footer{gap:10px;color:var(--ink-2)}
+body.calm *,body.calm *::before,body.calm *::after{animation:none!important;transition-duration:0s!important}
+body.calm .modal,body.calm .tweak-panel,body.calm #toast{transform:none}
+body.calm #toast{transform:translateX(-50%)}
+body.calm .agent,body.calm .agent .logo,body.calm .agent .open-arrow,body.calm button{transform:none!important}
+
 
 @media (max-width:1080px){
   .hero{grid-template-columns:1fr}
@@ -404,24 +404,130 @@ body.nofx .tilt{transform:none!important}
   .price-row{grid-template-columns:minmax(0,1fr) repeat(4,52px)}
   .tweaks{right:12px;bottom:12px}
   .big{font-size:clamp(44px,13vw,64px)}
-  .mr-row{grid-template-columns:22px minmax(0,1fr) auto;grid-template-areas:"rank name val" ". bar bar" ". comp comp" ". sub sub";row-gap:2px}
-  .mr-val{font-size:12.5px}
 }
 @media (prefers-reduced-motion:reduce){
-  *{animation-duration:.001s!important;animation-delay:0s!important;transition-duration:.001s!important}
-  .sheen,.aurora b{animation:none!important}
+  *,*::before,*::after{animation:none!important;transition-duration:0s!important}
+  .modal,.tweak-panel,.agent,.agent .logo,.agent .open-arrow,button{transform:none!important}
+  #toast{transform:translateX(-50%)!important}
+}
+@media (prefers-reduced-transparency:reduce){.topbar,.mask{backdrop-filter:none}.topbar{background:var(--paper)}}
+@media (max-width:640px){
+  .topbar{gap:8px}.brand{flex:1}.brand .mark{width:34px;height:34px;border-radius:11px}.brand h1{font-size:15px}
+  .spacer{display:none}.controls{display:contents}.pills{order:3;width:100%;flex-wrap:nowrap;border-radius:14px;gap:0}.pill{flex:1;padding:6px 7px;font-size:11.5px}
+  .icon-btn.labeled{padding:0 10px}
+  .tiles .card{padding:16px}.tile .v{font-size:28px}.tile .label{font-size:11px}
+  .hero .card{padding:20px}.legend{min-width:120px}.donut{width:160px}
+  .hero .donut-wrap{flex-direction:column;gap:18px}.hero .legend{width:100%;min-width:0}
+  .modal{padding:20px;width:100%}.price-row{min-width:480px}.scroll{overscroll-behavior:contain}
+  .mask{padding:20px 12px}.chip{padding:7px 10px}.hint-row{font-size:11px}
+}
+
+@media (min-width:760px) and (max-width:1080px){
+  .topbar{gap:10px;padding:10px 12px;margin-bottom:18px}
+  .brand{gap:8px}.brand .sub{display:none}.brand h1{font-size:17px}.brand .mark{width:32px;height:32px}
+  .spacer{display:none}.controls{margin-left:auto;gap:8px}.pill{padding:6px 10px;font-size:12px}
+  .hero{grid-template-columns:minmax(0,1.28fr) minmax(250px,.82fr);gap:12px}
+  .hero>.card{padding:14px}
+  .hero .big{font-size:clamp(48px,6vw,66px);margin-top:8px}
+  .hero .chips{gap:6px;margin-top:13px}
+  .hero .chip{padding:6px 10px;font-size:11.5px}
+  .hero .hint-row{margin-top:12px;gap:7px 12px;font-size:10.5px}
+  .hero .card-head{margin-bottom:10px}
+  .hero #donutBox{display:none}
+  .hero .donut-wrap{display:block}
+  .hero #donutLegend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px;min-width:0;width:100%}
+  .hero #donutLegend .li{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto 3px;gap:2px 8px;min-width:0;font-size:11px}
+  .hero #donutLegend .li .sw{display:none}
+  .hero #donutLegend .li .nm{grid-column:1;grid-row:1;min-width:0}
+  .hero #donutLegend .li b{grid-column:2;grid-row:1;font-size:11px}
+  .hero #donutLegend .li .rankbar{display:block;grid-column:1/-1;grid-row:2;height:3px;border-radius:99px;background:var(--paper-2);overflow:hidden}
+  .hero #donutLegend .li .rankbar i{display:block;width:100%;height:100%;border-radius:inherit;background:currentColor;transform-origin:left}
+  .tiles{gap:9px;margin-top:12px}
+  .tiles .card{padding:12px 14px}
+  .tile .v{font-size:25px;margin-top:5px}
+  .tile .m{font-size:10.5px;margin-top:3px}
+  .tile .label{font-size:10.5px}
+  .section-title{margin:16px 4px 10px}
+  .agents{grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+  .agent{padding:13px 15px}
+  .agent .top{gap:9px}
+  .agent .logo{width:32px;height:32px;border-radius:11px}
+  .agent .name{font-size:13.5px}
+  .agent .path{font-size:10.5px}
+  .agent .val{font-size:24px;margin-top:10px}
+  .agent .sharebar{margin-top:9px}
+  .agent .row{font-size:10.5px;margin-top:6px}
+  .agent .spark{display:none}
+}
+
+
+/* B 折纸 T：页面与桌面统一身份，图片随单文件HTML内嵌。 */
+.brand .mark,.boot-inner .mark{background:none;box-shadow:none;border-radius:0}
+.brand .mark::after{display:none}
+.mark img{display:block;width:100%;height:100%;object-fit:contain}
+/* 今日摘要：用一条可探索的七日趋势补充大读数，保持半屏紧凑。 */
+.summary-card{border-top:2px solid rgba(217,84,31,.23)}
+.hero-readout{display:grid;grid-template-columns:minmax(0,1.12fr) minmax(170px,.88fr);gap:24px;align-items:center;margin-top:8px}
+.hero-readout .big{font-size:clamp(48px,5.7vw,82px);margin-top:5px}
+.comparison{font-size:12px;color:var(--ink-2);margin-top:12px;min-height:20px}
+.comparison strong{color:var(--ember);font-weight:650}
+.compare-note{font-size:10.5px;color:var(--ink-3);line-height:1.5;margin-top:3px}
+.recent{padding:12px 14px 8px;border-radius:16px;background:linear-gradient(145deg,var(--paper),rgba(242,235,224,.45));min-width:0}
+.recent-head{display:flex;align-items:center;justify-content:space-between;gap:5px;font-size:11px;color:var(--ink-2)}
+.recent-head .seg{padding:2px;gap:0;border:0;background:rgba(34,29,24,.045)}
+.recent-head .seg button{font-size:10px;padding:3px 6px;white-space:nowrap}
+.recent-value{height:23px;margin-top:5px;font-size:10px;color:var(--ink-3);white-space:nowrap}
+.recent-value strong{font:600 15px var(--font-num);color:var(--ink);margin-right:5px}
+.recent-bars{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px;height:65px}
+.recent-day{min-width:0;display:flex;flex-direction:column;gap:5px;align-items:stretch;border-radius:6px;color:var(--ink-3);font-size:9px;transition:opacity var(--motion-fast) ease;touch-action:manipulation}
+.recent-track{position:relative;display:block;flex:1;min-height:0;border-radius:5px;background:rgba(217,84,31,.055);overflow:hidden}
+.recent-fill{position:absolute;inset:0;background:linear-gradient(0deg,#D2AA8E,#E1C4AF);transform-origin:bottom;border-radius:5px}
+.recent-day.today .recent-fill,.recent-day[aria-pressed="true"] .recent-fill{background:linear-gradient(0deg,var(--ember),var(--amber))}
+.recent-day[aria-pressed="true"]{color:var(--ember);font-weight:650}
+.recent-bars.exploring .recent-day:not(.explored){opacity:.4}
+.recent-foot{font-size:9px;line-height:1.5;margin-top:6px;color:var(--ink-3)}
+.hero .chips{margin-top:16px}
+.hero .hint-row{margin-top:12px}
+.refresh-delta{color:var(--ember);font-weight:550;font-size:10.5px;margin-top:4px;min-height:17px}
+.legend .li[data-segment]{cursor:default;border-radius:6px;transition:opacity var(--motion-fast) ease}
+.legend.exploring .li:not(.explored){opacity:.35}
+.donut [data-segment]{transition:opacity var(--motion-fast) ease}
+.donut.exploring [data-segment]:not(.explored){opacity:.22}
+.legend .li:focus-visible{outline:2px solid rgba(217,84,31,.5);outline-offset:4px}
+.view-bridge{position:fixed;z-index:65;pointer-events:none;margin:0!important;transform-origin:top left;white-space:nowrap;overflow:hidden}
+.head-bridging{opacity:0!important}
+@media (min-width:760px) and (max-width:1080px){
+  .hero-readout{grid-template-columns:minmax(0,1fr) minmax(150px,.9fr);gap:12px;margin-top:4px}
+  .hero-readout .big{font-size:clamp(42px,5.5vw,56px)}
+  .hero-readout .big .unit{letter-spacing:.03em}
+  .recent{padding:8px 9px 6px;border-radius:12px}
+  .recent-bars{height:45px;gap:4px}.recent-value{height:20px}
+  .recent-head .seg button{padding:2px 4px;font-size:9px}
+  .comparison{font-size:10.5px;margin-top:8px}
+  .compare-note{font-size:9px}
+  .hero .chips{margin-top:10px}.hero .hint-row{margin-top:8px;gap:5px 12px}
+  .hero .chip{padding:5px 9px}
+}
+@media (max-width:759px){.hero-readout{grid-template-columns:minmax(0,1fr) minmax(150px,.85fr);gap:12px}}
+@media (max-width:460px){
+  .hero-readout{grid-template-columns:minmax(0,1fr)}
+  .hero-readout .big{font-size:64px}.comparison{margin-top:8px}
+  .recent{margin-top:2px}.recent-bars{height:62px}
+  .recent-value{margin-top:5px}.recent-head{min-height:26px}
 }
 </style>
+<link rel="icon" type="image/png" href="data:image/png;base64,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">
 </head>
 <body>
-<div class="aurora"><b></b><b></b><b></b></div>
-<div class="noise"></div>
-<div class="sheen"><i></i></div>
 
+<div class="desktop-bar" id="desktopBar" hidden>
+  <button class="desktop-menu" id="desktopMenu" aria-label="应用菜单" aria-haspopup="menu" title="应用菜单"><svg class="i" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+  <span class="desktop-title">Token 查看器</span>
+</div>
 <div class="shell">
   <header class="topbar" id="topbar">
     <div class="brand">
-      <div class="mark">Tk</div>
+      <div class="mark"><img src="data:image/png;base64,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" alt="Token Viewer"></div>
       <div>
         <h1>Token 用量中心</h1>
         <div class="sub" id="brandSub">全 Agent 用量总览</div>
@@ -430,10 +536,10 @@ body.nofx .tilt{transform:none!important}
     <div class="spacer"></div>
     <div class="controls">
       <div class="pills" id="rangePills">
-        <button class="pill on" data-range="all">全部时间</button>
+        <button class="pill" data-range="all">全部时间</button>
         <button class="pill" data-range="30d">近 30 天</button>
         <button class="pill" data-range="7d">近 7 天</button>
-        <button class="pill" data-range="today">今日</button>
+        <button class="pill on" data-range="today">今日</button>
         <button class="pill" data-range="custom">自定义</button>
       </div>
       <button class="icon-btn" id="btnRefresh" title="重新扫描">
@@ -448,17 +554,30 @@ body.nofx .tilt{transform:none!important}
 
   <section id="overview">
     <div class="hero">
-      <div class="card tilt reveal" style="--i:0">
+      <div class="card">
         <div class="label" id="heroLabel">总 Token 消耗 · 全部时间</div>
-        <div class="big-wrap"><div class="big"><span id="heroTotal">0</span><span class="unit">tokens</span></div></div>
+        <div class="hero-readout">
+          <div>
+            <div class="big-wrap"><div class="big"><span id="heroTotal" data-metric="total">0</span><span class="unit">tokens</span></div></div>
+            <div class="comparison" id="heroCompare"></div>
+            <div class="compare-note" id="compareNote"></div>
+            <div class="refresh-delta" id="refreshDelta" role="status" aria-live="polite"></div>
+          </div>
+          <div class="recent" aria-label="最近七天用量">
+            <div class="recent-head"><b>近 7 天</b><div class="seg" id="recentMetric" aria-label="趋势计量方式"><button class="on" data-metric="tokens" aria-pressed="true">Token</button><button data-metric="cost" aria-pressed="false">成本</button></div></div>
+            <div class="recent-value" id="recentValue"></div>
+            <div class="recent-bars" id="recentBars" aria-label="按日期查看用量"></div>
+            <div class="recent-foot" id="recentFoot">今日未结束 · 点击日期查看</div>
+          </div>
+        </div>
         <div class="chips" id="heroChips"></div>
         <div class="hint-row">
           <span id="heroSpan">—</span>
           <span id="heroUpdated">—</span>
-          <span class="link" id="heroPricingHint">设置模型单价，折算预估成本</span>
+
         </div>
       </div>
-      <div class="card tilt reveal" style="--i:1">
+      <div class="card">
         <div class="card-head"><h3>各 Agent 占比</h3><span class="meta" id="donutHint"></span></div>
         <div class="donut-wrap">
           <div id="donutBox"></div>
@@ -469,30 +588,36 @@ body.nofx .tilt{transform:none!important}
 
     <div class="tiles" id="tiles"></div>
 
-    <div class="section-title"><h2>各 Agent 明细</h2><span class="hint">点击卡片下钻单个 Agent</span></div>
-    <div class="agents" id="agents"></div>
-
-    <div class="section-title"><h2>模型排行</h2><span class="hint">跟随顶部时间区间 · 同名 / 同 ID 的模型跨 Agent 合并累计</span></div>
-    <div class="card tilt reveal" id="rankCard">
-      <div class="card-head rank-head">
-        <h3>模型 Token 排行 Top 10 <span class="meta" id="rankRange"></span></h3>
-        <div class="seg" id="rankScale" title="等比条：长度严格正比于 token 量，头部模型会把尾部拑到很短；开方条：按平方根缩放，中小模型之间的高低更容易看出来，但长度不再正比于量">
-          <button data-k="linear" class="on">等比条</button><button data-k="sqrt">开方条</button>
+    <div class="section-title"><h2>各 Agent 明细</h2><div class="agent-nav"><span class="hint" id="agentCount"></span><button class="ranking-jump" id="jumpModels">模型排名 ↓</button></div></div>
+    <div class="agents" id="agents" tabindex="-1"></div>
+    <section class="card model-ranking" id="modelRanking" aria-labelledby="modelRankingTitle">
+      <div class="model-rank-sticky" id="modelRankSticky">
+        <div class="card-head">
+          <div class="model-rank-head-main"><h3 id="modelRankingTitle" tabindex="-1">模型 Token 排名</h3><span class="meta" id="modelRankingMeta"></span></div>
+          <button class="model-more" id="modelRankMore" aria-expanded="false" aria-controls="modelRankList">显示全部</button>
+        </div>
+        <div class="model-rank-controls">
+          <div class="pills model-rank-pills" id="modelRankRangePills" aria-label="模型排名时间范围">
+            <button class="pill" type="button" data-range="all">全部</button>
+            <button class="pill" type="button" data-range="30d">30 天</button>
+            <button class="pill" type="button" data-range="7d">7 天</button>
+            <button class="pill on" type="button" data-range="today">今日</button>
+            <button class="pill" type="button" data-range="custom">自定义</button>
+          </div>
         </div>
       </div>
-      <div class="rank-note" id="rankNote"></div>
-      <div id="modelRank"></div>
-      <div class="mr-foot" id="rankFoot" style="display:none"></div>
-    </div>
-
+      <p class="rank-note">汇总全部 Agent · 与顶部时间筛选同步 · 点击来源查看 Agent</p>
+      <div class="model-rank-viewport" id="modelRankViewport"><ol class="model-rank-list" id="modelRankList" aria-label="按 Token 从高到低排列的模型"></ol></div>
+      <div class="model-rank-footer"><span id="modelRankCoverage" role="status"></span></div>
+    </section>
   </section>
 
   <section id="detail"></section>
 
   <footer>
     <div>
-      <div>数据全部读取自本机会话文件，不修改、不上传。</div>
-      <div class="srcs" id="srcList"></div>
+      <div>本地读取 · 数据不上传</div>
+      <details class="source-details"><summary aria-expanded="false">数据源状态</summary><div class="source-panel" id="srcPanel" inert aria-hidden="true"><div class="srcs" id="srcList"></div></div></details>
     </div>
     <div style="text-align:right" id="footRight">—</div>
   </footer>
@@ -500,7 +625,7 @@ body.nofx .tilt{transform:none!important}
 
 <div id="boot">
   <div class="boot-inner">
-    <div class="mark"></div>
+    <div class="mark"><img src="data:image/png;base64,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" alt=""></div>
     <h2>正在读取本机 Agent 数据</h2>
     <p id="bootMsg">准备中…</p>
     <div class="bar"><i id="bootBar"></i></div>
@@ -508,9 +633,9 @@ body.nofx .tilt{transform:none!important}
   </div>
 </div>
 
-<div class="mask" id="pricingMask">
-  <div class="modal">
-    <h3>计价配置</h3>
+<div class="mask" id="pricingMask" inert aria-hidden="true">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="pricingTitle" tabindex="-1">
+    <h3 id="pricingTitle">计价配置</h3>
     <div class="desc">单价单位：美元 / 每百万 token。留空表示未计价，填 0 表示免费。保存后自动重算所有 Agent 的预估成本。</div>
     <div class="scroll" style="max-height:52vh">
       <div class="price-row head"><div>模型</div><div style="text-align:right">输入</div><div style="text-align:right">输出</div><div style="text-align:right">缓存读取</div><div style="text-align:right">缓存写入</div></div>
@@ -523,14 +648,14 @@ body.nofx .tilt{transform:none!important}
   </div>
 </div>
 
-<div class="mask" id="customMask">
-  <div class="modal" style="width:min(430px,94vw)">
-    <h3>自定义时间范围</h3>
+<div class="mask" id="customMask" inert aria-hidden="true">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="customTitle" tabindex="-1" style="width:min(430px,94vw)">
+    <h3 id="customTitle">自定义时间范围</h3>
     <div class="desc">按自然日筛选，包含起止当天。</div>
     <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-      <input type="date" id="dateFrom" style="flex:1;min-width:130px;background:var(--paper);border:1px solid var(--line);border-radius:12px;color:var(--ink);padding:10px 13px;font-size:13px">
+      <input type="date" id="dateFrom" aria-label="开始日期" style="flex:1;min-width:130px;background:var(--paper);border:1px solid var(--line);border-radius:12px;color:var(--ink);padding:10px 13px;font-size:13px">
       <span style="color:var(--ink-3)">→</span>
-      <input type="date" id="dateTo" style="flex:1;min-width:130px;background:var(--paper);border:1px solid var(--line);border-radius:12px;color:var(--ink);padding:10px 13px;font-size:13px">
+      <input type="date" id="dateTo" aria-label="结束日期" style="flex:1;min-width:130px;background:var(--paper);border:1px solid var(--line);border-radius:12px;color:var(--ink);padding:10px 13px;font-size:13px">
     </div>
     <div class="modal-foot">
       <button class="btn" id="dateCancel">取消</button>
@@ -540,26 +665,29 @@ body.nofx .tilt{transform:none!important}
 </div>
 
 <div class="tweaks">
-  <div class="tweak-panel" id="tweakPanel">
+  <div class="tweak-panel" id="tweakPanel" inert aria-hidden="true">
     <div class="t">动效与显示</div>
-    <div class="tweak-row"><span>悬停 3D 倾斜</span><button class="switch on" id="tgTilt"><i></i></button></div>
-    <div class="tweak-row"><span>流光与光斑</span><button class="switch on" id="tgGlow"><i></i></button></div>
-    <div class="tweak-row"><span>数字滚动</span><button class="switch on" id="tgNumbers"><i></i></button></div>
-    <div class="tweak-row"><span>全部减弱</span><button class="switch" id="tgCalm"><i></i></button></div>
+
+    <div class="tweak-row"><span>减少动态效果</span><button class="switch" id="tgCalm" role="switch" aria-checked="false" aria-label="减少动态效果"><i></i></button></div>
   </div>
-  <button class="icon-btn" id="btnTweaks" title="动效与显示" style="width:44px;height:44px;border-radius:15px">
+  <button class="icon-btn" id="btnTweaks" aria-label="动效与显示" aria-expanded="false" aria-controls="tweakPanel" title="动效与显示" style="width:44px;height:44px;border-radius:15px">
     <svg class="i" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
   </button>
 </div>
 
-<div id="toast"><div class="in" id="toastIn"></div></div>
+<div id="toast" role="status" aria-live="polite"><div class="in" id="toastIn"></div></div>
 <div class="tip" id="tip"></div>
 
 <script>
+if (typeof window.tokenViewerDesktop?.openMenu === 'function') {
+  document.body.classList.add('desktop');
+  document.getElementById('desktopBar').hidden = false;
+  document.getElementById('desktopMenu').addEventListener('click', () => window.tokenViewerDesktop.openMenu());
+}
 /* ============================================================
    0. 常量与工具
    ============================================================ */
-const API = location.port === '3457' ? '' : 'http://127.0.0.1:3457';
+const API = location.protocol === 'file:' ? 'http://127.0.0.1:3457' : '';
 window.__errs = [];
 addEventListener('error', (e) => { window.__errs.push(String(e.message || e).slice(0, 180)); });
 const $ = (s, r = document) => r.querySelector(s);
@@ -568,7 +696,7 @@ const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 /* 暖调粉彩：图表与 Agent 配色 */
 const PALETTE = ['#D9541F', '#C98A14', '#6F8265', '#5F86A0', '#C05C63', '#A9552F', '#8A6BA8', '#7E8A3F', '#B98A5A', '#4E8A73', '#96786A', '#CB7A4A'];
 const AGENT_COLORS = {
-  proma: '#D9541F',
+  mirage: '#D9541F',
   pi: '#8A6BA8',
   omp: '#C05C63',
   'claude-code': '#C4623A',
@@ -581,26 +709,60 @@ const AGENT_COLORS = {
 };
 const colorOf = (a, i) => AGENT_COLORS[a.id] || a.color || PALETTE[(i || 0) % PALETTE.length];
 
-/* Token 类型的固定配色（环图 / 堆叠图 / 模型排行共用同一口径） */
-const TOKEN_TYPES = [
-  { key: 'i', label: '输入', color: '#D9541F' },
-  { key: 'o', label: '输出', color: '#C98A14' },
-  { key: 'cr', label: '缓存读', color: '#6F8265' },
-  { key: 'cw', label: '缓存写', color: '#5F86A0' },
-];
-
 const S = {
   data: null,
   pricing: {},
-  range: { key: 'all', from: 0, to: Number.MAX_SAFE_INTEGER },
+  range: calendarRange('today'),
   view: 'overview',
   agent: null,
   detailMode: 'model',
   detailGran: 'auto',
-  rankScale: 'linear',   // 对比条刻度：linear = 等比，sqrt = 开方缩放
-  rankExpand: false,     // 模型排行是否展开全部
-  fx: { tilt: true, glow: true, numbers: true, calm: false },
+  recentMetric: 'tokens',
+  allModels: false,
+  fx: { calm: false },
 };
+
+const uiAnimationRuns = new Set();
+function uiMotionAllowed() { return !document.body.classList.contains('calm'); }
+function animateUI(el, slot, frames, options, onFinish) {
+  el[slot]?.cancel();
+  if (!uiMotionAllowed() || typeof el.animate !== 'function') { onFinish?.(); return null; }
+  let animation;
+  try { animation = el.animate(frames, options); }
+  catch { onFinish?.(); return null; }
+  let settled = false;
+  const settle = (finished) => {
+    if (settled) return;
+    settled = true;
+    uiAnimationRuns.delete(run);
+    if (el[slot] === run) el[slot] = null;
+    if (finished) {
+      try { animation.cancel(); } catch { /* 动画已结束 */ }
+      onFinish?.();
+    }
+  };
+  const run = {
+    animation,
+    cancel() {
+      if (settled) return;
+      try { animation.cancel(); } catch { /* 动画已停止 */ }
+      settle(false);
+    },
+    finish() {
+      if (settled) return;
+      try { animation.finish(); } catch { /* 立即进入最终状态 */ }
+      settle(true);
+    },
+  };
+  animation.onfinish = () => settle(true);
+  animation.oncancel = () => settle(false);
+  el[slot] = run;
+  uiAnimationRuns.add(run);
+  return run;
+}
+function settleUIAnimations() {
+  [...uiAnimationRuns].forEach((run) => run.finish());
+}
 
 const DAY = 86400000;
 const fmt = (n) => {
@@ -619,11 +781,51 @@ const money = (n) => {
   return '$' + Math.round(n).toLocaleString('en-US');
 };
 const pctS = (a, b) => (b > 0 ? ((a / b) * 100).toFixed(1) + '%' : '—');
+// DAILY_INSIGHT_START：纯计算区，供本地日历与同期口径测试复用。
 const dayKey = (ts) => {
   const d = new Date(ts);
   const p = (x) => String(x).padStart(2, '0');
   return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
 };
+function localDayStart(ts) { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); }
+function shiftCalendarDay(ts, days) { const d = new Date(ts); d.setDate(d.getDate() + days); return d.getTime(); }
+function calendarRange(key, now = Date.now()) {
+  if (key === 'all') return { key, from: 0, to: Number.MAX_SAFE_INTEGER };
+  const days = key === '7d' ? 7 : key === '30d' ? 30 : 1;
+  return { key, from: shiftCalendarDay(localDayStart(now), 1 - days), to: now };
+}
+function isDailyRecord(rec) { return rec.s === 'claude-stats'; }
+function recordInPeriod(rec, range) {
+  if (!isDailyRecord(rec)) return rec.t >= range.from && rec.t <= range.to;
+  const start = localDayStart(rec.t), end = shiftCalendarDay(start, 1);
+  return start <= range.to && end > range.from;
+}
+function buildDailyInsight(agents, now, costOf = () => 0) {
+  const start = localDayStart(now), yesterday = shiftCalendarDay(start, -1);
+  const previousEnd = shiftCalendarDay(now, -1);
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const t = shiftCalendarDay(start, i - 6);
+    return { key: dayKey(t), start: t, tokens: 0, cost: 0 };
+  });
+  const byDay = new Map(days.map(d => [d.key, d]));
+  let current = 0, previous = 0, dailyOnly = false;
+  for (const agent of agents) for (const rec of agent.records) {
+    const total = rec.i + rec.o + rec.cr + rec.cw;
+    const daily = isDailyRecord(rec);
+    if (daily && rec.t >= yesterday && localDayStart(rec.t) <= start) dailyOnly = true;
+    if (!daily) {
+      if (rec.t >= start && rec.t <= now) current += total;
+      else if (rec.t >= yesterday && rec.t <= previousEnd) previous += total;
+    }
+    const bucket = byDay.get(dayKey(rec.t));
+    if (bucket && recordInPeriod(rec, { from: days[0].start, to: now })) {
+      bucket.tokens += total;
+      bucket.cost += costOf(rec);
+    }
+  }
+  return { days, current, previous, dailyOnly, cutoff: now };
+}
+// DAILY_INSIGHT_END
 const dt = (ts) => new Date(ts).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -649,66 +851,14 @@ function findPrice(model) {
   }
   return null;
 }
-/* 单价匹配结果缓存：每条记录都要算成本，未命中时的模糊匹配（排序 + 子串）代价并不便宜。
-   S.pricing 在载入 / 保存 / 刷新时都是整体替换，因此按对象身份失效就够安全。 */
-const _priceMemo = new Map();
-let _priceMemoSrc = null;
-function priceOf(model) {
-  if (_priceMemoSrc !== S.pricing) { _priceMemo.clear(); _priceMemoSrc = S.pricing; }
-  if (!_priceMemo.has(model)) _priceMemo.set(model, findPrice(model));
-  return _priceMemo.get(model);
-}
 function recCost(r) {
   if (r.c != null) return r.c;
-  const p = priceOf(r.m);
+  const p = findPrice(r.m);
   if (!p) return 0;
   return ((r.i * (p.input || 0)) + (r.o * (p.output || 0)) + (r.cr * (p.cacheRead || 0)) + (r.cw * (p.cacheCreation || 0))) / 1e6;
 }
 
-/* ============================================================
-   1. 悬停手感：3D 倾斜 + 跟随高光 + 微按压
-   ============================================================ */
-const TILT_MAX = 5.5;
-function attachTilt(el) {
-  if (el._tilt) return;
-  el._tilt = true;
-  el.classList.add('tilt');
-  el.addEventListener('pointermove', (e) => {
-    const r = el.getBoundingClientRect();
-    const px = (e.clientX - r.left) / r.width;
-    const py = (e.clientY - r.top) / r.height;
-    el.style.setProperty('--mx', (px * 100).toFixed(1) + '%');
-    el.style.setProperty('--my', (py * 100).toFixed(1) + '%');
-    if (!S.fx.tilt || S.fx.calm) return;
-    el.style.setProperty('--rx', ((py - .5) * -TILT_MAX).toFixed(2) + 'deg');
-    el.style.setProperty('--ry', ((px - .5) * TILT_MAX).toFixed(2) + 'deg');
-    el.style.setProperty('--tx', ((px - .5) * 5).toFixed(2) + 'px');
-    el.style.setProperty('--ty', ((py - .5) * 5).toFixed(2) + 'px');
-  });
-  el.addEventListener('pointerleave', () => {
-    el.style.setProperty('--rx', '0deg');
-    el.style.setProperty('--ry', '0deg');
-    el.style.setProperty('--tx', '0px');
-    el.style.setProperty('--ty', '0px');
-  });
-  el.addEventListener('pointerdown', () => el.classList.add('press'));
-  ['pointerup', 'pointercancel', 'pointerleave'].forEach((ev) => el.addEventListener(ev, () => el.classList.remove('press')));
-}
-function attachTilts(root) { $$('.card', root || document).forEach(attachTilt); }
-
-/* 磁吸按钮：跟随光标轻微位移 */
-function attachMagnet(el) {
-  if (el._mag) return;
-  el._mag = true;
-  el.addEventListener('pointermove', (e) => {
-    if (!S.fx.tilt || S.fx.calm) return;
-    const r = el.getBoundingClientRect();
-    const dx = (e.clientX - r.left - r.width / 2) / r.width;
-    const dy = (e.clientY - r.top - r.height / 2) / r.height;
-    el.style.transform = `translate(${(dx * 5).toFixed(2)}px, ${(dy * 4 - 2).toFixed(2)}px)`;
-  });
-  el.addEventListener('pointerleave', () => { el.style.transform = ''; });
-}
+/* 动效仅用于可操作控件，静态卡片不绑定指针跟踪。 */
 
 /* 顶栏滚动状态 */
 addEventListener('scroll', () => {
@@ -716,26 +866,8 @@ addEventListener('scroll', () => {
 }, { passive: true });
 
 /* ============================================================
-   2. 数字动画与图表基元
+   2. 图表基元
    ============================================================ */
-function animateNumber(el, to, opts = {}) {
-  const from = opts.from != null ? opts.from : 0;
-  const dur = S.fx.numbers && !S.fx.calm ? (opts.dur || 1000) : 1;
-  const fmtFn = opts.format || fmt;
-  if (el._raf) cancelAnimationFrame(el._raf);
-  clearTimeout(el._to);
-  // 后台标签会节流 rAF，兜底直接写入终值，避免数字停在中间态
-  el._to = setTimeout(() => { el.textContent = fmtFn(to); }, dur + 140);
-  const t0 = performance.now();
-  const step = (now) => {
-    const k = Math.min(1, (now - t0) / dur);
-    const e = 1 - Math.pow(2, -10 * k);
-    el.textContent = fmtFn(from + (to - from) * e);
-    if (k < 1) el._raf = requestAnimationFrame(step);
-  };
-  el._raf = requestAnimationFrame(step);
-}
-
 const SVGNS = 'http://www.w3.org/2000/svg';
 function svg(tag, attrs = {}, parent) {
   const el = document.createElementNS(SVGNS, tag);
@@ -744,7 +876,7 @@ function svg(tag, attrs = {}, parent) {
   return el;
 }
 
-/* 环形图：逐段扫出 */
+/* 环形图 */
 function renderDonut(box, segments, centerTop, centerSub) {
   const size = 190, th = 16, r = (size - th) / 2 - 2, c = 2 * Math.PI * r, cx = size / 2;
   const total = segments.reduce((s, x) => s + x.value, 0) || 1;
@@ -752,17 +884,16 @@ function renderDonut(box, segments, centerTop, centerSub) {
   const s = svg('svg', { viewBox: `0 0 ${size} ${size}`, class: 'donut' });
   svg('circle', { cx, cy: cx, r, fill: 'none', stroke: 'rgba(34,29,24,.07)', 'stroke-width': th }, s);
   let acc = 0;
-  segments.forEach((seg, i) => {
+  segments.forEach((seg) => {
     const len = (seg.value / total) * c;
     if (len <= 0.4) { acc += len; return; }
-    const el = svg('circle', {
+    const arc = svg('circle', {
       cx, cy: cx, r, fill: 'none', stroke: seg.color, 'stroke-width': th,
-      'stroke-dasharray': `0 ${c}`, 'stroke-dashoffset': -acc, 'stroke-linecap': 'butt',
+      'stroke-dasharray': `${len} ${c - len}`, 'stroke-dashoffset': -acc, 'stroke-linecap': 'butt',
+      'data-segment': seg.key || seg.name,
     }, s);
-    requestAnimationFrame(() => {
-      el.style.transition = `stroke-dasharray 1s var(--ease) ${i * 90}ms`;
-      el.style.strokeDasharray = `${len} ${c - len}`;
-    });
+    arc.addEventListener('pointerenter', () => { if (matchMedia('(hover:hover) and (pointer:fine)').matches) box._highlight?.(seg.key || seg.name); });
+    arc.addEventListener('pointerleave', () => box._highlight?.(null));
     acc += len;
   });
   const t1 = svg('text', { x: cx, y: cx - 1, 'text-anchor': 'middle', 'font-size': '25', 'font-weight': '400', 'letter-spacing': '-1' }, s);
@@ -787,14 +918,12 @@ function renderSpark(host, values, color) {
   svg('stop', { offset: '0', 'stop-color': color, 'stop-opacity': '.26' }, lg);
   svg('stop', { offset: '1', 'stop-color': color, 'stop-opacity': '0' }, lg);
   svg('path', { d: d + ` L${w} ${h} L0 ${h} Z`, fill: `url(#${gid})`, stroke: 'none' }, s);
-  const path = svg('path', { d, fill: 'none', stroke: color, 'stroke-width': 1.7, 'stroke-linejoin': 'round', 'stroke-linecap': 'round', class: 'line' }, s);
-  try { path.style.setProperty('--len', path.getTotalLength()); } catch (e) { /* 忽略 */ }
+  svg('path', { d, fill: 'none', stroke: color, 'stroke-width': 1.7, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, s);
   svg('circle', { cx: pts[pts.length - 1][0].toFixed(1), cy: pts[pts.length - 1][1].toFixed(1), r: 2.4, fill: color }, s);
   host.appendChild(s);
-  requestAnimationFrame(() => s.classList.add('go'));
 }
 
-/* 堆叠柱状图：从底部生长 */
+/* 堆叠柱状图 */
 function renderStacked(host, buckets, series, opts = {}) {
   const h = opts.height || 250, padT = 18, padB = 28, padL = 46, padR = 8;
   host.innerHTML = '';
@@ -832,7 +961,7 @@ function renderStacked(host, buckets, series, opts = {}) {
       g = svg('g', { 'clip-path': `url(#${cid})` }, s);
     }
     let y = padT + plotH;
-    segs.forEach((sg, k) => {
+    segs.forEach((sg) => {
       const v = sg.v;
       const hh = (v / max) * plotH;
       // 段与段精确相邻（不重叠、不留缝），配合不透明填充与 crispEdges，接触处不会变深也不会露白线
@@ -840,9 +969,6 @@ function renderStacked(host, buckets, series, opts = {}) {
         x, y: y - hh, width: barW, height: Math.max(1.4, hh), fill: sg.ser.color,
         class: 'bar-rect', 'shape-rendering': 'crispEdges',
       }, g);
-      rect.style.transform = 'scaleY(0)';
-      rect.style.transition = `transform .9s var(--ease) ${Math.min(700, (bi % 24) * 22 + k * 14)}ms, filter .2s`;
-      requestAnimationFrame(() => { rect.style.transform = 'scaleY(1)'; });
       rect.addEventListener('mouseenter', (e) => {
         rect.style.filter = 'brightness(1.14) saturate(1.15)';
         showTip(e, `${esc(b.label)} · ${esc(sg.ser.name)}<br><b>${exact(v)}</b> tokens`);
@@ -866,17 +992,16 @@ function renderHBars(host, rows, total) {
   host.innerHTML = '';
   if (!rows.length) { host.innerHTML = '<div style="color:var(--ink-3);font-size:12.5px;padding:24px 0;text-align:center">暂无模型数据</div>'; return; }
   const max = Math.max(1, ...rows.map((r) => r.value));
-  rows.forEach((r, idx) => {
+  rows.forEach((r) => {
     const div = document.createElement('div');
     div.style.cssText = 'display:grid;grid-template-columns:minmax(92px,1.05fr) minmax(56px,2fr) auto;gap:11px;align-items:center;margin:11px 0;font-size:12px';
     div.innerHTML =
       `<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink-2)" title="${esc(r.name)}">${esc(r.name)}</div>` +
       `<div style="height:8px;border-radius:99px;background:var(--paper-2);overflow:hidden">` +
-      `<i style="display:block;height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,${r.color},${r.color}b0);transition:width 1.1s var(--ease) ${idx * 45}ms"></i></div>` +
+      `<i style="display:block;height:100%;width:${(r.value / max * 100).toFixed(1)}%;border-radius:99px;background:linear-gradient(90deg,${r.color},${r.color}b0)"></i></div>` +
       `<div class="num" style="color:var(--ink);white-space:nowrap">${fmt(r.value)}<span style="color:var(--ink-3);margin-left:7px;font-size:11px">${pctS(r.value, total)}</span></div>`;
     host.appendChild(div);
-    const i = div.querySelector('i');
-    requestAnimationFrame(() => { i.style.width = (r.value / max * 100).toFixed(1) + '%'; });
+
   });
 }
 
@@ -907,9 +1032,8 @@ function renderHeatmap(host, days) {
       x: wk * (cell + gap), y: dy * (cell + gap), width: cell, height: cell, rx: 3.5,
       fill: empty ? 'rgba(34,29,24,.045)' : mix(d.value / max),
       stroke: empty ? 'rgba(34,29,24,.05)' : 'none',
-      style: 'opacity:0;transform:scale(.4);transform-box:fill-box;transform-origin:center;transition:opacity .5s var(--ease),transform .5s var(--ease)',
+      style: 'opacity:1',
     }, s);
-    setTimeout(() => { rect.style.opacity = 1; rect.style.transform = 'scale(1)'; }, Math.min(900, i * 5));
     rect.addEventListener('mouseenter', (e) => showTip(e, `${esc(d.label)}<br><b>${exact(d.value)}</b> tokens${empty ? ' · 未使用' : ''}`));
     rect.addEventListener('mousemove', moveTip);
     rect.addEventListener('mouseleave', hideTip);
@@ -919,28 +1043,68 @@ function renderHeatmap(host, days) {
   legend.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:4px;margin-top:12px;font-size:11px;color:var(--ink-3)';
   legend.innerHTML = '<span>少</span>' + [0.08, 0.25, 0.45, 0.7, 1].map((a) =>
     `<i style="display:inline-block;width:11px;height:11px;border-radius:3px;background:${mix(a)}"></i>`).join('') +
-    '<span>多</span><span style="margin-left:10px">· 空格为未使用日</span>';
+    '<span>多</span>';
   host.appendChild(legend);
 }
 
 /* 提示气泡 */
 const tipEl = $('#tip');
 function showTip(e, html) { tipEl.innerHTML = html; tipEl.classList.add('on'); moveTip(e); }
-function moveTip(e) { tipEl.style.left = Math.min(innerWidth - 190, e.clientX + 14) + 'px'; tipEl.style.top = Math.max(10, e.clientY - 46) + 'px'; }
+function moveTip(e) {
+  const r = tipEl.getBoundingClientRect();
+  tipEl.style.left = Math.max(8, Math.min(innerWidth - r.width - 8, e.clientX + 14)) + 'px';
+  tipEl.style.top = Math.max(8, Math.min(innerHeight - r.height - 8, e.clientY - r.height - 10)) + 'px';
+}
 function hideTip() { tipEl.classList.remove('on'); }
 
 /* 视图切换动画 */
 function replay(el) {
-  el.classList.remove('view-in');
-  void el.offsetWidth;
-  el.classList.add('view-in');
+  const running = el._viewAnimation?.playState === 'running';
+  const live = running ? getComputedStyle(el) : null;
+  const from = running ? {opacity:live.opacity, transform:live.transform} : {opacity:.35, transform:'translateY(12px)'};
+  el._viewAnimation?.cancel();
+  if (S.fx.calm || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const tokens = getComputedStyle(document.documentElement);
+  el._viewAnimation = el.animate([from, {opacity:1, transform:'translateY(0)'}], {duration:parseFloat(tokens.getPropertyValue('--motion-surface')), easing:tokens.getPropertyValue('--ease-out').trim()});
+}
+
+function syncSegments(root = document) {
+  const groups = $$('.pills,.seg', root);
+  if (root.matches?.('.pills,.seg')) groups.unshift(root);
+  groups.forEach((group) => {
+    const active = $('button.on', group);
+    if (!active || !group.offsetWidth) return;
+    let indicator = $('.selection-indicator', group);
+    if (!indicator) {
+      indicator = document.createElement('span');
+      indicator.className = 'selection-indicator';
+      indicator.setAttribute('aria-hidden', 'true');
+      group.prepend(indicator);
+    }
+    indicator.style.width = active.offsetWidth + 'px';
+    indicator.style.height = active.offsetHeight + 'px';
+    indicator.style.transform = 'translate(' + active.offsetLeft + 'px,' + active.offsetTop + 'px)';
+    $$('button', group).forEach((b) => b.setAttribute('aria-pressed', String(b === active)));
+  });
+}
+addEventListener('resize', () => syncSegments());
+
+function recordBounds(agents, filtered = false) {
+  let min = Infinity, max = 0;
+  for (const a of agents) for (const r of a.records) {
+    if (!(r.t > 0) || (filtered && !recordInPeriod(r, S.range))) continue;
+    min = Math.min(min, r.t); max = Math.max(max, r.t);
+  }
+  return {min: Number.isFinite(min) ? min : Date.now(), max};
 }
 
 /* ============================================================
    3. 数据加载
    ============================================================ */
 async function fetchJSON(url, opts) {
-  const r = await fetch(API + url, opts);
+  let r;
+  try { r = await fetch(API + url, opts); }
+  catch { throw new Error('无法连接本地服务，请确认服务已启动'); }
   const txt = await r.text();
   try { return { status: r.status, body: JSON.parse(txt) }; }
   catch (e) { return { status: r.status, body: null, raw: txt }; }
@@ -987,23 +1151,23 @@ async function bootSequence() {
   if (!body || !body.agents) { $('#bootMsg').textContent = '没有拿到数据，请确认服务已启动。'; return; }
   S.data = body;
   S.pricing = body.pricing || {};
-  const all = Object.values(body.agents).flatMap((a) => a.records);
-  const minT = all.length ? Math.min(...all.map((r) => r.t)) : Date.now();
-  S.range = { key: 'all', from: 0, to: Number.MAX_SAFE_INTEGER };
+  const minT = recordBounds(Object.values(body.agents)).min;
+  S.range = calendarRange('today');
+  syncRangePills('today');
   $('#brandSub').textContent = `${Object.keys(body.agents).length} 类 Agent · 数据自 ${new Date(minT).toLocaleDateString('zh-CN')}`;
-  setTimeout(() => { $('#boot').classList.add('gone'); render(); }, 240);
+  render();
+  $('#boot').classList.add('gone');
 }
 
 /* ============================================================
    4. 聚合
    ============================================================ */
 function visibleAgents() { return Object.values(S.data.agents); }
-function inRange(t) { return t >= S.range.from && t <= S.range.to; }
 
 function aggAgent(agent) {
   const T = { i: 0, o: 0, cr: 0, cw: 0, r: 0, calls: 0, cost: 0, sessions: new Set(), models: new Map(), daily: new Map(), min: Infinity, max: 0, total: 0 };
   for (const rec of agent.records) {
-    if (!inRange(rec.t)) continue;
+    if (!recordInPeriod(rec, S.range)) continue;
     const sum = rec.i + rec.o + rec.cr + rec.cw;
     T.i += rec.i; T.o += rec.o; T.cr += rec.cr; T.cw += rec.cw; T.r += rec.r;
     T.calls++;
@@ -1031,28 +1195,158 @@ function aggAll() {
   return T;
 }
 
+/* MODEL_RANKING_START */
+function buildModelRanking(agents, range) {
+  const models = new Map();
+  for (const agent of agents) for (const rec of agent.records) {
+    if (!recordInPeriod(rec, range)) continue;
+    const value = rec.i + rec.o + rec.cr + rec.cw;
+    if (value <= 0) continue;
+    const name = rec.m || 'unknown';
+    let model = models.get(name);
+    if (!model) { model = { name, value: 0, calls: 0, agents: new Map() }; models.set(name, model); }
+    model.value += value; model.calls++;
+    model.agents.set(agent.id, (model.agents.get(agent.id) || 0) + value);
+  }
+  return [...models.values()].sort((a, b) => b.value - a.value || a.name.localeCompare(b.name));
+}
+/* MODEL_RANKING_END */
+
+function renderModelRanking({ animateExpansion = false } = {}) {
+  const viewport = $('#modelRankViewport');
+  const startHeight = viewport.getBoundingClientRect().height;
+  const interruptedExpansion = !!viewport._expandMotion;
+  viewport._expandMotion?.cancel();
+  viewport.style.height = '';
+  const rows = buildModelRanking(visibleAgents(), S.range);
+  const total = rows.reduce((sum, row) => sum + row.value, 0);
+  const shown = S.allModels ? rows : rows.slice(0, 10);
+  const host = $('#modelRankList'), previous = new Map([...host.children].map(el => [el.dataset.model, el]));
+  const snapshots = new Map([...previous].map(([name, el]) => [name, { rect: el.getBoundingClientRect(), visible: isVisibleInViewport(el), scale: getComputedStyle($('.model-fill', el)).transform }]));
+  const focus = document.activeElement, focusModel = focus?.closest('.model-rank-row')?.dataset.model;
+  [...previous.values()].forEach(el => { el._modelMove?.cancel(); $('.model-fill', el)._modelBar?.cancel(); });
+  const max = rows[0]?.value || 1;
+  const motions = [];
+  shown.forEach((model, index) => {
+    const el = previous.get(model.name) || document.createElement('li');
+    if (!previous.has(model.name)) {
+      el.className = 'model-rank-row'; el.dataset.model = model.name;
+      el.innerHTML = '<span class="model-place" aria-hidden="true"></span><div class="model-identity"><div class="model-name"></div><div class="model-origins"></div></div><div class="model-track" aria-hidden="true"><i class="model-fill"></i></div><div class="model-amount"><span></span><small></small></div>';
+    }
+    $('.model-place', el).textContent = String(index + 1).padStart(2, '0');
+    $('.model-name', el).textContent = model.name;
+    const amount = $('.model-amount span', el), changed = el.dataset.value && Number(el.dataset.value) !== model.value;
+    const fadeFrom = amount._modelNumber ? getComputedStyle(amount).opacity : '.6';
+    amount.textContent = fmt(model.value); el.dataset.value = model.value;
+    $('.model-amount', el).title = exact(model.value) + ' tokens · ' + exact(model.calls) + ' 次记录';
+    $('.model-amount small', el).textContent = pctS(model.value, total) + ' · tokens';
+    const origins = [...model.agents].sort((a, b) => b[1] - a[1]);
+    const signature = JSON.stringify(origins);
+    if (el._origins !== signature) {
+      const sources = $('.model-origins', el); sources.replaceChildren();
+      for (const [id, value] of origins) {
+        const button = document.createElement('button'); button.className = 'model-origin'; button.dataset.agent = id;
+        button.textContent = S.data.agents[id].name + (id === 'qoder' ? '（估算）' : ''); button.title = `${exact(value)} tokens · 查看 ${button.textContent}`;
+        sources.appendChild(button);
+      }
+      el._origins = signature;
+    }
+    const bar = $('.model-fill', el); bar.style.transform = `scaleX(${model.value / max})`;
+    host.appendChild(el);
+    motions.push({ el, bar, amount, changed, fadeFrom, old: snapshots.get(model.name), added: !previous.has(model.name) });
+  });
+  const next = new Set(shown.map(row => row.name));
+  for (const [name, el] of previous) if (!next.has(name)) { el._modelMove?.cancel(); $('.model-amount span', el)._modelNumber?.cancel(); el.remove(); }
+  // 全部节点进入最终顺序后再计算目标位置；连续切换从捕获的当前帧接续。
+  let enteringRows = 0;
+  for (const { el, bar, amount, changed, fadeFrom, old, added } of motions) {
+    if (isVisibleInViewport(el)) {
+      if (old?.visible) {
+        const rect = el.getBoundingClientRect(), dy = old.rect.top - rect.top;
+        if (Math.abs(dy) > 1) animateUI(el, '_modelMove', [{ translate: `0 ${dy}px` }, { translate: '0 0' }], { duration: 220, easing: 'cubic-bezier(.16,1,.3,1)' });
+        animateUI(bar, '_modelBar', [{ transform: old.scale }, { transform: bar.style.transform }], { duration: 180, easing: 'cubic-bezier(.16,1,.3,1)' });
+      } else if (added && enteringRows < 4) {
+        enteringRows++;
+        animateUI(el, '_modelMove', [{ opacity: .4, translate: '0 5px' }, { opacity: 1, translate: '0 0' }], { duration: 180, easing: 'cubic-bezier(.16,1,.3,1)' });
+      }
+      if (changed) animateUI(amount, '_modelNumber', [{ opacity: fadeFrom }, { opacity: 1 }], { duration: 120, easing: 'ease-out' });
+    }
+  }
+  const more = $('#modelRankMore'); more.hidden = rows.length <= 10;
+  more.textContent = S.allModels ? '收起为前 10 名' : `显示全部 ${rows.length} 个模型`;
+  more.setAttribute('aria-expanded', String(S.allModels));
+  if (focusModel && document.activeElement !== focus) {
+    const retained = [...host.children].find(el => el.dataset.model === focusModel);
+    const replacement = retained && [...retained.querySelectorAll('button')].find(el => el.dataset.agent === focus.dataset.agent);
+    (replacement || (!more.hidden ? more : $('#modelRankingTitle'))).focus({ preventScroll: true });
+  }
+  if (focus === more && more.hidden) $('#modelRankingTitle').focus({ preventScroll: true });
+  $('#modelRankingMeta').textContent = `${rangeLabel()} · ${rows.length} 个模型`;
+  $('#modelRankCoverage').textContent = rows.length ? `显示 ${shown.length} / ${rows.length} · 占所选用量 ${pctS(shown.reduce((sum, row) => sum + row.value, 0), total)}` : '这个时间段暂无模型用量';
+  const endHeight = viewport.scrollHeight;
+  if ((animateExpansion || interruptedExpansion) && Math.abs(endHeight - startHeight) > 1) {
+    viewport.style.height = `${startHeight}px`;
+    animateUI(viewport, '_expandMotion', [{ height: `${startHeight}px` }, { height: `${endHeight}px` }], {
+      duration: 240,
+      easing: getComputedStyle(document.documentElement).getPropertyValue('--ease-out').trim() || 'cubic-bezier(.16,1,.3,1)',
+    }, () => { viewport.style.height = ''; });
+  } else viewport.style.height = '';
+}
+$('#modelRankMore').addEventListener('click', () => { S.allModels = !S.allModels; renderModelRanking({ animateExpansion: true }); });
+$('#modelRankList').addEventListener('click', e => {
+  const button = e.target.closest('[data-agent]');
+  if (button) openAgent(button.dataset.agent, { model: button.closest('.model-rank-row').dataset.model, agent: button.dataset.agent });
+});
+function updateModelRankStickyOffset() {
+  const toolbar = $('#topbar');
+  if (!toolbar) return;
+  const bottom = toolbar.getBoundingClientRect().bottom;
+  document.documentElement.style.setProperty('--model-rank-sticky-top', `${Math.max(0, Math.ceil(bottom + 8))}px`);
+}
+let modelRankOffsetFrame = 0;
+function queueModelRankStickyOffset() {
+  if (modelRankOffsetFrame) return;
+  modelRankOffsetFrame = requestAnimationFrame(() => {
+    modelRankOffsetFrame = 0;
+    updateModelRankStickyOffset();
+  });
+}
+addEventListener('resize', queueModelRankStickyOffset, { passive: true });
+addEventListener('scroll', queueModelRankStickyOffset, { passive: true });
+if ('ResizeObserver' in window) new ResizeObserver(queueModelRankStickyOffset).observe($('#topbar'));
+updateModelRankStickyOffset();
+
+function scrollToModelRanking(behavior = uiMotionAllowed() ? 'smooth' : 'instant') {
+  $('#modelRankingTitle').focus({ preventScroll: true });
+  const inset = $('#topbar').getBoundingClientRect().bottom + 16;
+  scrollTo({ top: scrollY + $('#modelRanking').getBoundingClientRect().top - inset, behavior });
+}
+$('#jumpModels').addEventListener('click', () => scrollToModelRanking());
+
 /* ============================================================
    5. 渲染：总览
    ============================================================ */
 function render(animate) {
   if (!S.data) return;
-  $('#heroLabel').textContent = '总 Token 消耗 · ' + rangeLabel();
-  renderOverview();
+  hideTip();
+  $('#heroLabel').textContent = S.range.key === 'today' ? '今天用了多少' : 'Token 用量 · ' + rangeLabel();
   const ov = $('#overview'), dv = $('#detail');
   if (S.view === 'overview') {
+    dv._viewAnimation?.cancel();
     ov.style.display = '';
+    renderOverview();
     dv.classList.remove('on');
     dv.innerHTML = '';
     if (animate !== false) replay(ov);
   } else {
+    ov._viewAnimation?.cancel();
     ov.style.display = 'none';
     dv.classList.add('on');
     renderDetail(S.agent);
     if (animate !== false) replay(dv);
   }
   renderSources();
-  attachTilts();
-  $$('.btn.primary, .chip').forEach(attachMagnet);
+  syncSegments();
 }
 
 function rangeLabel() {
@@ -1068,34 +1362,31 @@ function rangeLabel() {
 function renderOverview() {
   const A = aggAll();
   const agents = visibleAgents().filter((a) => a.status !== 'missing');
+  $('#heroTotal').closest('.card').classList.add('summary-card');
 
   const heroEl = $('#heroTotal');
-  const prev = Number(heroEl.dataset.v || 0);
-  animateNumber(heroEl, A.total, { from: S.fx.numbers ? prev : A.total });
+  heroEl.textContent = fmt(A.total);
+  heroEl.title = exact(A.total) + ' tokens';
   heroEl.dataset.v = A.total;
   $('#heroChips').innerHTML = [
-    chip('调用次数', exact(A.calls) + ' 次'),
+    chip('用量记录', exact(A.calls) + ' 条'),
     chip('会话数', exact(A.sessions) + ' 个'),
-    chip('缓存读取', fmt(A.cr)),
     costChip(A.cost),
   ].join('');
   $('#chipCost').addEventListener('click', openPricing);
-  const recs = agents.flatMap((a) => a.records);
-  const minT = recs.length ? Math.min(...recs.map((r) => r.t)) : 0;
-  const maxT = recs.length ? Math.max(...recs.map((r) => r.t)) : 0;
+  const bounds = recordBounds(agents, true);
+  const minT = bounds.max ? bounds.min : 0, maxT = bounds.max;
   $('#heroSpan').innerHTML = minT
     ? `<span class="label" style="letter-spacing:.06em">时间跨度</span> <b class="num" style="color:var(--ink-2)">${new Date(minT).toLocaleDateString('zh-CN')} → ${new Date(maxT).toLocaleDateString('zh-CN')}</b>`
     : '暂无数据';
-  $('#heroUpdated').innerHTML = `<span class="label" style="letter-spacing:.06em">更新于</span> <b class="num" style="color:var(--ink-2)">${dt(S.data.generatedAt)}</b> · 读取耗时 ${(S.data.durationMs / 1000).toFixed(1)}s`;
+  $('#heroUpdated').innerHTML = `<span class="label" style="letter-spacing:.06em">更新于</span> <b class="num" style="color:var(--ink-2)">${dt(S.data.generatedAt)}</b>`;
+  renderDailySummary();
+  renderModelRanking();
 
   const segs = agents.filter((a) => (A.per[a.id] || {}).total > 0)
     .sort((x, y) => A.per[y.id].total - A.per[x.id].total)
-    .map((a, i) => ({ name: a.name, value: A.per[a.id].total, color: colorOf(a, i) }));
-  renderDonut($('#donutBox'), segs, fmt(A.total), 'tokens');
-  $('#donutLegend').innerHTML = segs.length
-    ? segs.slice(0, 8).map((s) => `<div class="li"><span class="sw" style="background:${s.color};color:${s.color}"></span><span class="nm">${esc(s.name)}</span><b>${pctS(s.value, A.total)}</b></div>`).join('')
-    : '<div class="li" style="color:var(--ink-3)">当前区间没有数据</div>';
-  $('#donutHint').textContent = segs.length ? `${segs.length} 个 Agent 在用` : '';
+    .map((a, i) => ({ key: a.id, name: a.name, value: A.per[a.id].total, color: colorOf(a, i) }));
+  renderOverviewDonut(segs, A.total);
 
   const tiles = [
     { l: '输入 Token（非缓存）', v: fmt(A.i), m: pctS(A.i, A.total) + ' 占比', c: '#D9541F' },
@@ -1104,45 +1395,201 @@ function renderOverview() {
     { l: '缓存写入', v: fmt(A.cw), m: pctS(A.cw, A.total) + ' 占比', c: '#5F86A0' },
   ];
   $('#tiles').innerHTML = tiles.map((t, i) =>
-    `<div class="card tilt reveal" style="--i:${i + 2};color:${t.c}"><span class="rail"></span>` +
+    `<div class="card tile" style="color:${t.c}"><span class="rail"></span>` +
     `<div class="label" style="color:var(--ink-3)">${t.l}</div>` +
-    `<div class="v" style="color:${t.c}">${t.v}</div>` +
+    `<div class="v" data-metric="tile-${i}" style="color:${t.c}">${t.v}</div>` +
     `<div class="m">${t.m}</div></div>`).join('');
 
-  renderModelRank();
+  $('#agentCount').textContent = agents.length + ' 个数据源';
   const host = $('#agents');
-  host.innerHTML = '';
-  const sorted = agents.slice().sort((a, b) => ((A.per[b.id] || {}).total || 0) - ((A.per[a.id] || {}).total || 0));
-  sorted.forEach((a, i) => {
+  const orderedAgents = agents.slice().sort((a, b) => ((A.per[b.id] || {}).total || 0) - ((A.per[a.id] || {}).total || 0));
+  const previousCards = [...host.children];
+  const previousOrder = previousCards.map((card) => card.dataset.agentId);
+  const previousPositions = new Map();
+  const focusedCard = document.activeElement?.closest?.('.agent');
+  const focusedId = focusedCard?.parentElement === host ? focusedCard.dataset.agentId : null;
+  const focusedIndex = previousOrder.indexOf(focusedId);
+  const listWasVisible = isVisibleInViewport(host);
+  const rankingWasMoving = previousCards.some((card) => !!card._rankMotion);
+  previousCards.forEach((card) => {
+    const rect = card.getBoundingClientRect();
+    previousPositions.set(card.dataset.agentId, {
+      left: rect.left, top: rect.top, visible: isVisibleInViewport(card),
+    });
+    card._rankMotion?.cancel();
+  });
+  const cardsById = new Map(previousCards.map((card) => [card.dataset.agentId, card]));
+  const nextIds = new Set(orderedAgents.map((a) => a.id));
+  orderedAgents.forEach((a, i) => {
     const t = A.per[a.id] || { total: 0, calls: 0, sessions: new Set(), daily: new Map(), cost: 0, cr: 0 };
     const color = colorOf(a, i);
     const empty = a.status === 'empty' || a.status === 'missing' || t.total === 0;
-    const card = document.createElement('div');
-    card.className = 'card tilt agent reveal' + (empty ? ' empty' : '');
-    card.style.setProperty('--i', String(i + 6));
+    const card = cardsById.get(a.id) || document.createElement('div');
+    const previousBar = $('.sharebar i', card);
+    const previousScale = previousBar && getComputedStyle(previousBar).transform;
+    previousBar?._shareMotion?.cancel();
+    card.dataset.agentId = a.id;
+    card.className = 'card agent' + (empty ? ' empty' : '') + (a.status === 'error' ? ' error' : '');
+    card.tabIndex = 0;
+    card.setAttribute('role', 'button');
+    card.setAttribute('aria-label', a.name + '，' + fmt(t.total) + ' tokens，查看详情');
     const daily = [...t.daily.entries()].sort().slice(-30).map(([, v]) => v);
     card.innerHTML = `
       <div class="top">
         <div class="logo" style="background:linear-gradient(140deg,${color},${color}c0)">${esc(a.name.slice(0, 2).toUpperCase())}</div>
         <div style="min-width:0;flex:1">
           <div class="name">${esc(a.name)}</div>
-          <div class="path">${esc(a.subtitle || '')}</div>
+      <div class="path">${a.id === 'qoder' ? '文本估算' : a.records.some((r) => r.s === 'claude-stats') ? '含历史日汇总' : ''}</div>
         </div>
-        ${empty ? `<span class="badge">${a.status === 'missing' ? '未安装' : '暂无数据'}</span>` : ''}
+        ${a.status === 'error' ? '<span class="badge">读取失败</span>' : empty ? '<span class="badge">区间内无数据</span>' : '<span class="open-arrow" aria-hidden="true">↗</span>'}
       </div>
-      <div class="val" style="color:${empty ? 'var(--ink-3)' : 'var(--ink)'}">${fmt(t.total)}<span class="unit">tokens</span></div>
-      <div class="sharebar"><i style="background:linear-gradient(90deg,${color},${color}99);transform:scaleX(0)"></i></div>
-      <div class="row"><span><b>${exact(t.calls)}</b> 次调用</span><span><b>${exact(t.sessions.size)}</b> 个会话</span></div>
+      <div class="val" data-metric="agent-${esc(a.id)}" data-v="${t.total}" style="color:${empty ? 'var(--ink-3)' : 'var(--ink)'}">${fmt(t.total)}<span class="unit">tokens</span></div>
+      <div class="sharebar"><i style="background:linear-gradient(90deg,${color},${color}99);transform:scaleX(${Math.min(1, t.total / Math.max(1, A.total)).toFixed(4)})"></i></div>
+      <div class="row"><span><b>${exact(t.calls)}</b> 条记录</span><span><b>${exact(t.sessions.size)}</b> 个会话</span></div>
       <div class="row"><span>缓存读取 <b>${fmt(t.cr)}</b></span><span><b>${money(t.cost)}</b></span></div>
       <div class="spark" data-spark></div>`;
     host.appendChild(card);
-    const barI = card.querySelector('.sharebar i');
-    requestAnimationFrame(() => { barI.style.transform = `scaleX(${Math.min(1, t.total / Math.max(1, A.total)).toFixed(4)})`; });
+    const nextBar = $('.sharebar i', card);
+    if (previousScale && listWasVisible && isVisibleInViewport(card)) {
+      animateUI(nextBar, '_shareMotion', [{ transform: previousScale }, { transform: nextBar.style.transform }], { duration: 120, easing: 'cubic-bezier(.16,1,.3,1)' });
+    }
+
     if (!empty && daily.length > 1) renderSpark(card.querySelector('[data-spark]'), daily, color);
-    card.addEventListener('click', () => openAgent(a.id));
   });
-  // 排行卡已移到 Agent 卡片网格下方，入场序号跟着排在其后
-  $('#rankCard').style.setProperty('--i', String(sorted.length + 6));
+  previousCards.forEach((card) => { if (!nextIds.has(card.dataset.agentId)) card.remove(); });
+
+  const nextOrder = orderedAgents.map((a) => a.id);
+  const orderChanged = previousOrder.length !== nextOrder.length || previousOrder.some((id, i) => id !== nextOrder[i]);
+  const listIsVisible = isVisibleInViewport(host);
+  if ((orderChanged || rankingWasMoving) && listWasVisible && listIsVisible && uiMotionAllowed()) {
+    [...host.children].forEach((card) => {
+      const old = previousPositions.get(card.dataset.agentId);
+      if (!old?.visible || !isVisibleInViewport(card)) return;
+      const rect = card.getBoundingClientRect();
+      const dx = old.left - rect.left, dy = old.top - rect.top;
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+      animateUI(card, '_rankMotion', [
+        { translate: `${dx}px ${dy}px` },
+        { translate: '0px 0px' },
+      ], { duration: 220, easing: 'cubic-bezier(.16,1,.3,1)' });
+    });
+  }
+
+  if (focusedId) {
+    const focusTarget = (nextIds.has(focusedId) ? cardsById.get(focusedId) : null) ||
+      [...host.children][Math.max(0, Math.min(focusedIndex, host.children.length - 1))] || host;
+    if (document.activeElement !== focusTarget) focusTarget.focus({ preventScroll: true });
+  }
+}
+
+function renderDailySummary() {
+  const now = Date.now(), generated = Math.min(now, S.data.generatedAt || now);
+  const freshDay = dayKey(generated) === dayKey(now);
+  const insight = buildDailyInsight(visibleAgents(), freshDay ? generated : now, recCost);
+  S.dailyInsight = insight;
+  let comparison = '累计用量 · 按本机记录';
+  if (S.range.key === 'today') {
+    if (!freshDay) comparison = '今日尚未刷新，请重新读取数据';
+    else if (!insight.previous) comparison = insight.current ? '昨日同期无记录' : '同期暂无可比记录';
+    else {
+      const change = ((insight.current - insight.previous) / insight.previous) * 100;
+      comparison = `<strong>${change > 0 ? '↑' : change < 0 ? '↓' : '—'} ${Math.abs(change).toFixed(1)}%</strong> 较昨日同期`;
+    }
+  } else if (S.range.key !== 'all') comparison = '所选区间汇总';
+  $('#heroCompare').innerHTML = comparison;
+  const errors = visibleAgents().filter(a => a.status === 'error').length;
+  $('#compareNote').textContent = [
+    S.range.key === 'today' && insight.dailyOnly ? '同期对比不含仅按日统计的记录' : '',
+    errors ? `${errors} 个来源读取失败，统计可能不完整` : '',
+  ].filter(Boolean).join(' · ');
+  renderRecentTrend();
+}
+function renderRecentTrend() {
+  const host = $('#recentBars'), days = S.dailyInsight.days, metric = S.recentMetric;
+  const previous = new Map([...host.children].map(el => [el.dataset.day, el]));
+  const max = Math.max(1e-9, ...days.map(d => d[metric]));
+  days.forEach((d, i) => {
+    const button = previous.get(d.key) || document.createElement('button');
+    const previousFill = $('.recent-fill', button);
+    const from = previousFill && getComputedStyle(previousFill).transform;
+    previousFill?._barMotion?.cancel();
+    const selected = S.range.key !== 'all' && dayKey(S.range.from) === d.key && dayKey(S.range.to) === d.key;
+    button.className = 'recent-day' + (i === 6 ? ' today' : '');
+    button.type = 'button'; button.dataset.day = d.key;
+    button.setAttribute('aria-pressed', String(selected));
+    button.setAttribute('aria-label', `${d.key}，${metric === 'cost' ? '预估成本 ' + money(d.cost) : exact(d.tokens) + ' tokens'}，查看当日明细`);
+    const scale = Math.max(d[metric] > 0 ? .035 : 0, d[metric] / max);
+    const dateLabel = i === 6 ? '今天' : i === 0 || d.key.slice(0, 7) !== days[i - 1].key.slice(0, 7) ? d.key.slice(5).replace('-', '/') : new Date(d.start).getDate() + '日';
+    button.innerHTML = `<span class="recent-track" aria-hidden="true"><i class="recent-fill" style="transform:scaleY(${scale})"></i></span><span>${dateLabel}</span>`;
+    host.appendChild(button);
+    if (from) animateUI($('.recent-fill', button), '_barMotion', [{ transform: from }, { transform: `scaleY(${scale})` }], { duration: 120, easing: 'cubic-bezier(.16,1,.3,1)' });
+  });
+  [...previous].forEach(([key, el]) => { if (!days.some(d => d.key === key)) el.remove(); });
+  $$('#recentMetric button').forEach(b => { const active = b.dataset.metric === metric; b.classList.toggle('on', active); b.setAttribute('aria-pressed', String(active)); });
+  const time = new Date(S.dailyInsight.cutoff).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  $('#recentFoot').textContent = metric === 'cost' ? '成本估算 · 未计价不计入' : '今日未结束 · 点日期筛选';
+  $('.recent').title = `最近七天，截至今日 ${time}；成本仅按已计价记录估算，不代表账单`;
+  const focusedDay = host.contains(document.activeElement) && document.activeElement.dataset.day;
+  showRecentDay(focusedDay || days[6].key, !!focusedDay);
+  syncSegments($('#recentMetric'));
+}
+function showRecentDay(key, exploring = true) {
+  const day = S.dailyInsight?.days.find(d => d.key === key);
+  if (!day) return;
+  $('#recentValue').innerHTML = `<strong>${S.recentMetric === 'cost' ? money(day.cost) : fmt(day.tokens)}</strong>${key === S.dailyInsight.days[6].key ? '今天' : key.slice(5).replace('-', '/')} · ${S.recentMetric === 'cost' ? '已计价' : key === S.dailyInsight.days[6].key ? '未结束' : '全天'}`;
+  $('#recentBars').classList.toggle('exploring', exploring);
+  $$('#recentBars .recent-day').forEach(b => b.classList.toggle('explored', b.dataset.day === key));
+}
+const recentBars = $('#recentBars');
+recentBars.addEventListener('pointerover', e => { const b = e.target.closest('[data-day]'); if (b && matchMedia('(hover:hover) and (pointer:fine)').matches) showRecentDay(b.dataset.day); });
+recentBars.addEventListener('focusin', e => { const b = e.target.closest('[data-day]'); if (b) showRecentDay(b.dataset.day); });
+function resetRecentExploration() { const focused = recentBars.contains(document.activeElement) && document.activeElement.dataset.day; showRecentDay(focused || S.dailyInsight.days[6].key, !!focused); }
+recentBars.addEventListener('pointerleave', resetRecentExploration);
+recentBars.addEventListener('focusout', e => { if (!recentBars.contains(e.relatedTarget)) showRecentDay(S.dailyInsight.days[6].key, false); });
+recentBars.addEventListener('click', e => {
+  const button = e.target.closest('[data-day]'); if (!button) return;
+  const from = new Date(button.dataset.day + 'T00:00:00').getTime();
+  S.range = { key: 'custom', from, to: shiftCalendarDay(from, 1) - 1 };
+  syncRangePills('custom');
+  render(false);
+});
+$('#recentMetric').addEventListener('click', e => {
+  const button = e.target.closest('[data-metric]'); if (!button || S.recentMetric === button.dataset.metric) return;
+  S.recentMetric = button.dataset.metric; renderRecentTrend();
+});
+function renderOverviewDonut(segments, total) {
+  const box = $('#donutBox'), legend = $('#donutLegend');
+  const focusedKey = legend.contains(document.activeElement) ? document.activeElement.dataset.segment : null;
+  renderDonut(box, segments, fmt(total), 'tokens');
+  legend.innerHTML = segments.length ? segments.map(s => `<div class="li" data-segment="${esc(s.key)}" tabindex="0" role="button" aria-label="${esc(s.name)}，${pctS(s.value, total)}，查看详情"><span class="sw" style="background:${s.color};color:${s.color}"></span><span class="nm">${esc(s.name)}</span><b>${pctS(s.value, total)}</b><span class="rankbar" aria-hidden="true"><i style="background:${s.color};transform:scaleX(${s.value / Math.max(1, total)})"></i></span></div>`).join('') : '<div class="li">当前区间没有数据</div>';
+  box._highlight = key => {
+    const segment = segments.find(s => s.key === key);
+    const active = !!segment;
+    $('.donut', box).classList.toggle('exploring', active);
+    legend.classList.toggle('exploring', active);
+    $$('[data-segment]', box).concat($$('[data-segment]', legend)).forEach(el => el.classList.toggle('explored', el.dataset.segment === key));
+    const texts = $$('text', box);
+    texts[0].textContent = active ? fmt(segment.value) : fmt(total);
+    texts[1].textContent = active ? (segment.name.length > 16 ? segment.name.slice(0, 14) + '…' : segment.name) : 'TOKENS';
+    $('#donutHint').textContent = active ? `${segment.name} · ${pctS(segment.value, total)}` : segments.length ? `${segments.length} 个 Agent 在用` : '';
+  };
+  box._highlight(null);
+  if (focusedKey) { const restored = $$('[data-segment]', legend).find(el => el.dataset.segment === focusedKey); restored?.focus({ preventScroll: true }); box._highlight(restored ? focusedKey : null); }
+}
+const overviewLegend = $('#donutLegend');
+overviewLegend.addEventListener('pointerover', e => { const row = e.target.closest('[data-segment]'); if (row && matchMedia('(hover:hover) and (pointer:fine)').matches) $('#donutBox')._highlight?.(row.dataset.segment); });
+overviewLegend.addEventListener('pointerleave', () => $('#donutBox')._highlight?.(overviewLegend.contains(document.activeElement) ? document.activeElement.dataset.segment : null));
+overviewLegend.addEventListener('focusin', e => $('#donutBox')._highlight?.(e.target.dataset.segment));
+overviewLegend.addEventListener('focusout', e => { if (!overviewLegend.contains(e.relatedTarget)) $('#donutBox')._highlight?.(null); });
+overviewLegend.addEventListener('click', e => { const row = e.target.closest('[data-segment]'); if (row) openAgent(row.dataset.segment); });
+overviewLegend.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.dataset.segment && !e.repeat) { e.preventDefault(); openAgent(e.target.dataset.segment); } });
+
+function isVisibleInViewport(el) {
+  if (!el || document.hidden) return false;
+  const style = getComputedStyle(el);
+  if (style.display === 'none' || style.visibility === 'hidden') return false;
+  const rect = el.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.top < innerHeight && rect.right > 0 && rect.left < innerWidth;
 }
 
 function chip(label, val) {
@@ -1155,163 +1602,98 @@ function costChip(cost) {
   let unpriced = 0;
   for (const a of visibleAgents()) {
     for (const rec of a.records) {
-      if (!inRange(rec.t) || rec.c != null || seen.has(rec.m)) continue;
+      if (!recordInPeriod(rec, S.range) || rec.c != null || seen.has(rec.m)) continue;
       seen.add(rec.m);
       if (!findPrice(rec.m)) unpriced++;
     }
   }
-  return `<span class="chip cost" id="chipCost" title="点击设置模型单价"><span class="dot"></span>预估成本 <b>${money(cost)}</b>` +
-    `<em>${unpriced ? `${unpriced} 个模型未计价 · 去设置` : '单价设置'}</em></span>`;
+  return `<button class="chip cost" id="chipCost" title="设置模型单价"><span class="dot"></span>预估成本 <b>${money(cost)}</b>` +
+    `<em>${unpriced ? `${unpriced} 个未计价` : '计价'}</em></button>`;
 }
 
-/* ============================================================
-   5.1 模型排行：跨 Agent 合并同名 / 同 ID 的模型
-   ============================================================ */
-
-// 只统计顶部选定的时间区间（区间为“全部时间”时就是全量历史）
-function aggModels() {
-  const map = new Map();
-  for (const a of visibleAgents()) {
-    for (const rec of a.records) {
-      if (!inRange(rec.t)) continue;
-      const key = normModel(rec.m) || 'unknown';
-      let m = map.get(key);
-      if (!m) {
-        m = {
-          key, total: 0, i: 0, o: 0, cr: 0, cw: 0, r: 0, calls: 0, cost: 0, priced: false,
-          names: new Map(), agents: new Map(), sessions: new Set(), min: Infinity, max: 0,
-        };
-        map.set(key, m);
-      }
-      const sum = rec.i + rec.o + rec.cr + rec.cw;
-      m.i += rec.i; m.o += rec.o; m.cr += rec.cr; m.cw += rec.cw; m.r += rec.r;
-      m.total += sum; m.calls++;
-      m.cost += recCost(rec);
-      if (!m.priced && (rec.c != null || priceOf(rec.m))) m.priced = true;
-      // 同一条模型在不同工具里写法不同（带供应商前缀、带 [] 备注、大小写不一）：
-      // 用 normModel 归一后归入同一个 key，各原始写法单独计数备查
-      m.names.set(rec.m, (m.names.get(rec.m) || 0) + 1);
-      m.agents.set(a.id, (m.agents.get(a.id) || 0) + sum);
-      if (rec.s) m.sessions.add(a.id + '|' + rec.s); // 会话 id 只在单 Agent 内唯一，拼上源 id 防碰撞
-      if (rec.t < m.min) m.min = rec.t;
-      if (rec.t > m.max) m.max = rec.t;
-    }
-  }
-  const out = [...map.values()].map((m) => {
-    // 展示名：不带 [] 备注的写法优先，写法本身等于归一 key 的再优先，
-    // 剩下的按出现次数取——排行看的是模型 ID，不是某个工具的个性化备注
-    const score = (n) => (/\[|\]/.test(n) ? 2 : 0) + (String(n).toLowerCase() === m.key ? 0 : 1);
-    const names = [...m.names.entries()].sort((x, y) =>
-      score(x[0]) - score(y[0]) || y[1] - x[1] || String(x[0]).length - String(y[0]).length);
-    m.name = names.length ? String(names[0][0]) : m.key;
-    m.aliases = names.slice(1);
-    m.agentList = [...m.agents.entries()].sort((x, y) => y[1] - x[1]).map(([id, v]) => {
-      const ag = S.data.agents[id] || { id };
-      return { name: ag.name || id, value: v, color: colorOf(ag, 0) };
-    });
-    return m;
-  });
-  out.sort((x, y) => y.total - x.total);
-  return out;
-}
-
-const dkey = (ts) => new Date(ts).toLocaleDateString('zh-CN');
-
-function renderModelRank() {
-  const host = $('#modelRank');
-  const note = $('#rankNote');
-  const foot = $('#rankFoot');
-  if (!host) return;
-  const rows = aggModels();
-  const grand = rows.reduce((s, r) => s + r.total, 0);
-  const label = rangeLabel();
-  $('#rankRange').textContent = '· ' + label;
-
-  if (!rows.length) {
-    host.innerHTML = `<div class="mr-empty">${esc(label)}内没有模型用量</div>`;
-    note.innerHTML = '';
-    foot.style.display = 'none';
-    return;
-  }
-
-  const max = Math.max(1, ...rows.map((r) => r.total));
-  // 条长换算：等比忠实反映量级；开方把差距压匀，方便看尾部模型的高低
-  const widthOf = (v) => {
-    if (v <= 0) return 0;
-    const w = S.rankScale === 'sqrt' ? Math.sqrt(v / max) * 100 : (v / max) * 100;
-    return Math.max(1.4, Math.min(100, w));
-  };
-
-  const list = S.rankExpand ? rows : rows.slice(0, 10);
-  const rest = rows.slice(10);
-  const shownSum = list.reduce((s, r) => s + r.total, 0);
-  // 刻度说明：避免读者把条长当成严格比例
-  const clamped = S.rankScale === 'linear' && list.some((m) => widthOf(m.total) > (m.total / max) * 100 + 0.01);
-  const scaleHint = S.rankScale === 'sqrt'
-    ? ' · 对比条为<b>开方刻度（√）</b>，长度不严格正比于 token 量'
-    : (clamped ? ' · 对比条<b>等比</b>，不足 1.4% 的按 1.4% 起画' : '');
-
-  note.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px">` +
-    `<span style="width:6px;height:6px;border-radius:50%;background:var(--sky);display:inline-block"></span>` +
-    `统计区间：<b>${esc(label)}</b>` +
-    `（跟顶部区间联动） · 共 <b>${exact(rows.length)}</b> 个模型 · 合计 <b>${fmt(grand)}</b> tokens${scaleHint}</span>`;
-
-  host.innerHTML = list.map((m, i) => {
-    const color = PALETTE[i % PALETTE.length];
-    const comp = TOKEN_TYPES.filter((t) => m[t.key] > 0);
-    const alias = m.aliases.length
-      ? `<span class="alias" title="同一个模型 ID 的不同写法已合并计入：${esc(m.aliases.map(([n, c]) => `${n}（${exact(c)} 次调用）`).join('；'))}">+${m.aliases.length} 写法</span>`
-      : '';
-    const chips = comp.map((t) =>
-      `<span style="color:${t.color}"><i class="sw"></i>${t.label} <b>${fmt(m[t.key])}</b></span>`).join('');
-    const extra = [
-      m.r > 0 ? `<span>推理 <b>${fmt(m.r)}</b>（已计入输出）</span>` : '',
-      `<span><b>${exact(m.calls)}</b> 次调用</span>`,
-      m.sessions.size ? `<span><b>${exact(m.sessions.size)}</b> 个会话</span>` : '',
-      `<span>${m.priced ? `<b>${money(m.cost)}</b>` : '<b style="color:var(--amber)">未计价</b>'}</span>`,
-      `<span>${esc(m.agentList.map((x) => x.name).join(' · '))}</span>`,
-      Number.isFinite(m.min) ? `<span>${dkey(m.min)} → ${dkey(m.max)}</span>` : '',
-    ].join('');
-    const bars = comp.map((t) => `<b style="flex:${m[t.key].toFixed(0)};background:${t.color}"></b>`).join('');
-    return `
-      <div class="mr-row${i < 3 ? ' top3' : ''}">
-        <div class="mr-rank">${i + 1}</div>
-        <div class="mr-name"><span class="nm" title="${esc(m.name)}">${esc(m.name)}</span>${alias}</div>
-        <div class="mr-bar"><i style="--w:${widthOf(m.total).toFixed(2)}%;background:linear-gradient(90deg,${color},${color}b8);animation-delay:${i * 45}ms"></i></div>
-        <div class="mr-val" title="精确值 ${exact(m.total)} tokens">${fmt(m.total)}<em>${pctS(m.total, grand)}</em></div>
-        <div class="mr-comp">${bars}</div>
-        <div class="mr-sub">${chips}${extra}</div>
-      </div>`;
-  }).join('');
-
-  foot.style.display = '';
-  const hiddenN = S.rankExpand ? 0 : rest.length;
-  const hiddenSum = rest.reduce((s, r) => s + r.total, 0);
-  foot.innerHTML =
-    `<span>${S.rankExpand ? `全部 ${exact(rows.length)} 个模型合计` : `前 ${list.length} 名合计`} <b style="color:var(--ink-2);font-family:var(--font-num)">${fmt(shownSum)}</b> · 占 ${pctS(shownSum, grand)}` +
-    (hiddenN ? `；其余 ${hiddenN} 个模型合计 ${fmt(hiddenSum)} · 占 ${pctS(hiddenSum, grand)}` : '') +
-    `</span>` +
-    (rest.length ? `<span class="link" id="rankToggle">${S.rankExpand ? '收起，只看前 10' : `展开全部 ${rows.length} 个模型`}</span>` : '');
-}
+const agentHost = $('#agents');
+agentHost.addEventListener('click', (e) => {
+  const card = e.target.closest('.agent');
+  if (!card || card.parentElement !== agentHost) return;
+  if (e.detail === 0 && card._keyboardActivationAt && Date.now() - card._keyboardActivationAt < 500) return;
+  openAgent(card.dataset.agentId);
+});
+agentHost.addEventListener('keydown', (e) => {
+  const card = e.target.closest('.agent');
+  if (!card || card.parentElement !== agentHost || e.repeat || (e.key !== 'Enter' && e.key !== ' ')) return;
+  e.preventDefault();
+  card._keyboardActivationAt = Date.now();
+  openAgent(card.dataset.agentId);
+});
 
 /* ============================================================
    6. 渲染：详情
    ============================================================ */
-function openAgent(id) {
+const viewBridges = new Set();
+function finishViewBridges() { [...viewBridges].forEach(run => run.finish()); }
+function headingSnapshot(root, iconSelector, titleSelector) {
+  if (!root || !uiMotionAllowed()) return [];
+  return [iconSelector, titleSelector].map(selector => {
+    const el = $(selector, root);
+    if (!el || !isVisibleInViewport(el)) return null;
+    const rect = el.getBoundingClientRect(), computed = getComputedStyle(el);
+    const styles = {};
+    for (const key of ['background', 'color', 'borderRadius', 'fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'display', 'alignItems', 'justifyContent']) styles[key] = computed[key];
+    return { text: el.textContent, rect, styles };
+  });
+}
+function bridgeHeading(snapshots, root, selectors) {
+  if (!uiMotionAllowed()) return false;
+  let started = false;
+  snapshots.forEach((snapshot, i) => {
+    const target = $(selectors[i], root);
+    if (!snapshot || !target || !isVisibleInViewport(target)) return;
+    const end = target.getBoundingClientRect(), start = snapshot.rect;
+    if (!start.width || !start.height || !end.width || !end.height) return;
+    const clone = document.createElement('div');
+    clone.className = 'view-bridge'; clone.setAttribute('aria-hidden', 'true'); clone.textContent = snapshot.text;
+    Object.assign(clone.style, snapshot.styles, { left: start.left + 'px', top: start.top + 'px', width: start.width + 'px', height: start.height + 'px' });
+    document.body.appendChild(clone); target.classList.add('head-bridging');
+    let run;
+    run = animateUI(clone, '_bridge', [
+      { transform: 'translate(0,0) scale(1)' },
+      { transform: `translate(${end.left - start.left}px,${end.top - start.top}px) scale(${end.width / start.width},${end.height / start.height})` },
+    ], { duration: 220, easing: 'cubic-bezier(.16,1,.3,1)' }, () => { target.classList.remove('head-bridging'); clone.remove(); viewBridges.delete(run); });
+    if (run) { viewBridges.add(run); started = true; }
+  });
+  return started;
+}
+function openAgent(id, returnModelFocus = null) {
+  if (!S.data.agents[id]) return;
+  finishViewBridges();
+  const card = $$('#agents .agent').find(el => el.dataset.agentId === id);
+  const snapshots = headingSnapshot(card, '.logo', '.name');
+  S.returnScroll = scrollY;
+  S.returnModelFocus = returnModelFocus;
   S.view = 'agent';
   S.agent = id;
-  render();
-  window.scrollTo({ top: 0, behavior: S.fx.calm ? 'auto' : 'smooth' });
+  render(false);
+  window.scrollTo({ top: 0, behavior: 'instant' });
+  if (!bridgeHeading(snapshots, $('#detail'), ['.agent-head .logo', '.agent-head h2'])) replay($('#detail'));
+  $('#btnBack')?.focus({ preventScroll: true });
 }
 function backToOverview() {
+  finishViewBridges();
+  const id = S.agent, snapshots = headingSnapshot($('#detail'), '.agent-head .logo', '.agent-head h2');
   S.view = 'overview';
   S.agent = null;
-  render();
-  window.scrollTo({ top: 0, behavior: S.fx.calm ? 'auto' : 'smooth' });
+  render(false);
+  window.scrollTo({ top: S.returnScroll || 0, behavior: 'instant' });
+  const card = $$('#agents .agent').find(el => el.dataset.agentId === id);
+  if (!card || !bridgeHeading(snapshots, card, ['.logo', '.name'])) replay($('#overview'));
+  const model = S.returnModelFocus;
+  const modelRow = model && [...$('#modelRankList').children].find(el => el.dataset.model === model.model);
+  const origin = modelRow && [...modelRow.querySelectorAll('[data-agent]')].find(el => el.dataset.agent === model.agent);
+  (origin || card)?.focus({ preventScroll: true });
 }
 
 function detailTile(l, v, m, color) {
-  return `<div class="card tilt reveal" style="color:${color}"><span class="rail"></span>` +
+  return `<div class="card tile" style="color:${color}"><span class="rail"></span>` +
     `<div class="label" style="color:var(--ink-3)">${l}</div>` +
     `<div class="v" style="color:${color}">${v}</div>` +
     `<div class="m">${esc(m)}</div></div>`;
@@ -1334,12 +1716,12 @@ function renderDetail(id) {
     </div>
     <div class="tiles">
       ${detailTile('Token 总量', fmt(t.total), exact(t.total) + ' tokens', color)}
-      ${detailTile('调用次数', exact(t.calls), exact(t.sessions.size) + ' 个会话', '#C98A14')}
+      ${detailTile('用量记录', exact(t.calls), exact(t.sessions.size) + ' 个会话', '#C98A14')}
       ${detailTile('缓存命中率', pctS(t.cr, t.i + t.cr), '读取 ' + fmt(t.cr), '#6F8265')}
-      ${detailTile('预估成本', money(t.cost), '按当前计价', '#5F86A0')}
+      ${detailTile('预估成本', money(t.cost), '', '#5F86A0')}
     </div>
     <div class="grid2">
-      <div class="card tilt">
+      <div class="card">
         <div class="card-head">
           <h3>用量趋势</h3>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -1356,31 +1738,40 @@ function renderDetail(id) {
         </div>
         <div id="trend"></div>
       </div>
-      <div class="card tilt">
+      <div class="card">
         <div class="card-head"><h3>Token 类型分布</h3></div>
         <div class="donut-wrap"><div id="detailDonut"></div><div class="legend" id="detailLegend"></div></div>
       </div>
     </div>
     <div class="grid2">
-      <div class="card tilt">
+      <div class="card">
         <div class="card-head"><h3>模型明细</h3><span class="meta">${t.models.size} 个模型</span></div>
         <div id="models"></div>
       </div>
-      <div class="card tilt">
-        <div class="card-head"><h3>每日用量热力图</h3><span class="meta">当前时间窗口内逐日·含空白</span></div>
+      <div class="card">
+        <div class="card-head"><h3>每日用量热力图</h3></div>
         <div id="heat"></div>
       </div>
     </div>
-    <div class="card tilt" style="margin-top:16px">
-      <div class="card-head"><h3>会话明细</h3><span class="meta">按用量排序，最多 40 条</span></div>
+    <div class="card" style="margin-top:16px">
+      <div class="card-head"><h3>会话明细</h3><span class="meta" id="sessionCount"></span></div>
       <div class="scroll"><table class="data" id="sessTable"></table></div>
     </div>`;
 
   $('#btnBack').addEventListener('click', backToOverview);
 
-  const drawTrend = () => {
+  $$('#segMode button').forEach((b) => b.classList.toggle('on', b.dataset.m === S.detailMode));
+  $$('#segGran button').forEach((b) => b.classList.toggle('on', b.dataset.g === S.detailGran));
+  const drawTrend = (userChange = false) => {
     const host = $('#trend');
+    const fadeFrom = host._trendFade ? Number.parseFloat(getComputedStyle(host).opacity) : .72;
+    if (userChange) host._trendFade?.cancel();
     const mode = S.detailMode;
+    const fadeAfterDraw = () => {
+      if (userChange) animateUI(host, '_trendFade', [
+        { opacity: fadeFrom }, { opacity: 1 },
+      ], { duration: 120, easing: 'cubic-bezier(.16,1,.3,1)' });
+    };
     // 自动粒度：按“补全后的时间桶数”判断——有数据的天数 ≠ 渲染出的桶数
     const fromTs = Math.max(S.range.from, t.min || 0);
     const toTs = Math.min(S.range.to, t.max || Date.now());
@@ -1394,7 +1785,7 @@ function renderDetail(id) {
     // 先把区间内出现过的桶收集起来，再补成连续序列：
     // 没数据的月份也占位，否则横轴间距会骗人，柱子也会“对不上”
     const keys = new Set();
-    for (const rec of a.records) if (inRange(rec.t)) keys.add(keyOf(rec.t));
+    for (const rec of a.records) if (recordInPeriod(rec, S.range)) keys.add(keyOf(rec.t));
     let ordered = [...keys].sort();
     if (ordered.length > 1) {
       const filled = [];
@@ -1422,7 +1813,7 @@ function renderDetail(id) {
       const top = ranked.slice(0, 6).map(([m]) => m);
       const hasOther = ranked.length > top.length;
       for (const rec of a.records) {
-        if (!inRange(rec.t)) continue;
+        if (!recordInPeriod(rec, S.range)) continue;
         const i = slot.get(keyOf(rec.t));
         if (i == null) continue;
         const key = top.includes(rec.m) ? rec.m : (hasOther ? '__other__' : null);
@@ -1434,7 +1825,7 @@ function renderDetail(id) {
       if (hasOther) series.push({ key: '__other__', name: `其他 ${ranked.length - top.length} 个模型`, color: '#A69A8B' });
     } else {
       for (const rec of a.records) {
-        if (!inRange(rec.t)) continue;
+        if (!recordInPeriod(rec, S.range)) continue;
         const i = slot.get(keyOf(rec.t));
         if (i == null) continue;
         const o = bucketObjs[i];
@@ -1453,25 +1844,36 @@ function renderDetail(id) {
 
     if (!bucketObjs.length) {
       host.innerHTML = '<div style="color:var(--ink-3);font-size:12.5px;padding:60px 0;text-align:center">当前区间暂无数据</div>';
+      fadeAfterDraw();
       return;
     }
     const total = bucketObjs.reduce((s, b) => s + series.reduce((x, sr) => x + (b[sr.key] || 0), 0), 0);
     renderStacked(host, bucketObjs, series, { height: 252 });
     const tip = document.createElement('div');
     tip.style.cssText = 'margin-top:10px;font-size:11.5px;color:var(--ink-3);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap';
-    tip.innerHTML = `<span>${gran === 'month' ? '按月' : '按日'} · ${bucketObjs.length} 个时间桶</span>` +
-      `<span>图内合计 ${fmt(total)} tokens</span>`;
+    tip.innerHTML = `<span>${gran === 'month' ? '月度' : '每日'}用量</span>`;
     host.appendChild(tip);
+    fadeAfterDraw();
   };
   drawTrend();
-  const bindSeg = (sel, apply) => $$(sel + ' button').forEach((b) => b.addEventListener('click', () => {
-    $$(sel + ' button').forEach((x) => x.classList.remove('on'));
-    b.classList.add('on');
-    apply(b);
-    drawTrend();
-  }));
-  bindSeg('#segMode', (b) => { S.detailMode = b.dataset.m; });
-  bindSeg('#segGran', (b) => { S.detailGran = b.dataset.g; });
+  dv._drawTrend = drawTrend;
+  if (!dv._trendControlsBound) {
+    dv.addEventListener('click', (e) => {
+      const button = e.target.closest('#segMode button,#segGran button');
+      if (!button || !dv.contains(button)) return;
+      const isMode = button.dataset.m != null;
+      const next = isMode ? button.dataset.m : button.dataset.g;
+      const current = isMode ? S.detailMode : S.detailGran;
+      if (next === current) return;
+      const group = button.parentElement;
+      $$('button', group).forEach((item) => item.classList.toggle('on', item === button));
+      if (isMode) S.detailMode = next;
+      else S.detailGran = next;
+      dv._drawTrend?.(true);
+      syncSegments(dv);
+    });
+    dv._trendControlsBound = true;
+  }
 
   const segs = [
     { name: '输入（非缓存）', value: t.i, color: '#D9541F' },
@@ -1509,7 +1911,7 @@ function renderDetail(id) {
 
   const sess = new Map();
   for (const rec of a.records) {
-    if (!inRange(rec.t)) continue;
+    if (!recordInPeriod(rec, S.range)) continue;
     const sid = rec.s || '(未知)';
     if (!sess.has(sid)) sess.set(sid, { id: sid, total: 0, calls: 0, cost: 0, last: 0, models: new Set() });
     const o = sess.get(sid);
@@ -1519,16 +1921,17 @@ function renderDetail(id) {
     if (rec.t > o.last) o.last = rec.t;
     o.models.add(rec.m);
   }
-  const srows = [...sess.values()].sort((x, y) => y.total - x.total).slice(0, 40);
+  const srows = [...sess.values()].sort((x, y) => y.total - x.total);
+  $('#sessionCount').textContent = srows.length + ' 个会话 · 按用量排序';
   const meta = a.sessions || {};
   $('#sessTable').innerHTML =
-    '<thead><tr><th>会话</th><th>调用</th><th>Token</th><th>成本</th><th>最近活动</th></tr></thead><tbody>' +
+    '<thead><tr><th>会话</th><th>用量记录</th><th>Token</th><th>成本</th><th>最近活动</th></tr></thead><tbody>' +
     (srows.length ? srows.map((s) => {
       const m = meta[s.id] || {};
-      const title = m.title || (m.cwd ? m.cwd.split(/[\\/]/).pop() : '') || '';
+      const title = String(m.title || '').trim() || (m.cwd ? m.cwd.split(/[\\/]/).filter(Boolean).pop() : '') || '未命名会话';
       return `<tr>
-        <td><b>${esc(title || s.id.slice(0, 20))}</b><div class="sub">${esc([...s.models].slice(0, 3).join(' · '))}</div></td>
-        <td class="num" style="text-align:right">${exact(s.calls)}</td>
+        <td title="${esc(title)} · ${esc(s.id)}"><b>${esc(title)}</b><div class="sub">${esc([...s.models].slice(0, 3).join(' · '))}</div></td>
+        <td class="num" style="text-align:right;white-space:nowrap">${exact(s.calls)} 条</td>
         <td class="num" style="text-align:right"><b>${fmt(s.total)}</b></td>
         <td class="num" style="text-align:right">${money(s.cost)}</td>
         <td class="num" style="text-align:right;white-space:nowrap">${dt(s.last)}</td>
@@ -1537,13 +1940,74 @@ function renderDetail(id) {
     '</tbody>';
 }
 
+const sourceDetails = $('.source-details');
+const sourceSummary = $('summary', sourceDetails);
+const sourcePanel = $('#srcPanel');
+sourceDetails._sourceTargetOpen = false;
+sourceSummary.addEventListener('click', (e) => {
+  e.preventDefault();
+  setSourceDetailsOpen(!sourceDetails._sourceTargetOpen);
+});
+
+function finishSourcePanel() {
+  if (sourceDetails._sourceTargetOpen) {
+    sourcePanel.style.height = 'auto';
+    sourcePanel.style.opacity = '1';
+    return;
+  }
+  sourceDetails.open = false;
+  sourcePanel.inert = true;
+  sourcePanel.setAttribute('aria-hidden', 'true');
+  sourcePanel.style.height = '0px';
+  sourcePanel.style.opacity = '0';
+}
+
+function animateSourcePanelHeight(from, target) {
+  animateUI(sourcePanel, '_sourceHeightMotion', [
+    { height: `${from}px` }, { height: `${target}px` },
+  ], { duration: 220, easing: 'cubic-bezier(.16,1,.3,1)' }, finishSourcePanel);
+}
+
+function setSourceDetailsOpen(open) {
+  if (open === sourceDetails._sourceTargetOpen) return;
+  const from = sourcePanel.getBoundingClientRect().height;
+  const opacity = Number.parseFloat(getComputedStyle(sourcePanel).opacity) || 0;
+  sourcePanel._sourceHeightMotion?.cancel();
+  sourceDetails._sourceTargetOpen = open;
+  sourceSummary.setAttribute('aria-expanded', String(open));
+  if (open) {
+    sourceDetails.open = true;
+    sourcePanel.inert = false;
+    sourcePanel.setAttribute('aria-hidden', 'false');
+  }
+  sourcePanel.style.height = `${from}px`;
+  sourcePanel.style.opacity = String(opacity);
+  void sourcePanel.offsetHeight;
+  sourcePanel.style.opacity = open ? '1' : '0';
+  animateSourcePanelHeight(from, open ? sourcePanel.scrollHeight : 0);
+}
+
+function retargetOpenSourcePanel() {
+  if (!sourceDetails._sourceTargetOpen) return;
+  if (!sourcePanel._sourceHeightMotion) {
+    sourcePanel.style.height = 'auto';
+    return;
+  }
+  const from = sourcePanel.getBoundingClientRect().height;
+  sourcePanel._sourceHeightMotion.cancel();
+  sourcePanel.style.height = `${from}px`;
+  animateSourcePanelHeight(from, sourcePanel.scrollHeight);
+}
+addEventListener('resize', retargetOpenSourcePanel);
+
 function renderSources() {
   $('#srcList').innerHTML = visibleAgents().map((a, i) => {
     const dot = a.status === 'ok' ? colorOf(a, i) : a.status === 'empty' ? 'var(--amber)' : a.status === 'missing' ? 'var(--ink-3)' : '#C05C63';
     return `<div class="src"><span class="dot" style="background:${dot}"></span><b>${esc(a.name)}</b>` +
       `<span>${exact(a.records.length)} 条 · ${a.stats.files} 文件</span></div>`;
   }).join('');
-  $('#footRight').innerHTML = `读取 ${(S.data.durationMs / 1000).toFixed(1)}s · ${exact(visibleAgents().reduce((s, a) => s + a.records.length, 0))} 条记录<br><span style="color:var(--ink-3)">Token Viewer v1.0</span>`;
+  retargetOpenSourcePanel();
+  $('#footRight').textContent = exact(visibleAgents().reduce((s, a) => s + a.records.length, 0)) + ' 条用量记录';
 }
 
 /* ============================================================
@@ -1561,16 +2025,23 @@ function openPricing() {
     const v = used.get(m) || 0;
     return `<div class="price-row">
       <div class="mname" title="${esc(m)}">${esc(m)}${v ? `<em>${fmt(v)}</em>` : ''}</div>
-      <input type="number" step="0.001" min="0" data-m="${esc(m)}" data-k="input" value="${p.input != null ? p.input : ''}" placeholder="—">
-      <input type="number" step="0.001" min="0" data-m="${esc(m)}" data-k="output" value="${p.output != null ? p.output : ''}" placeholder="—">
-      <input type="number" step="0.001" min="0" data-m="${esc(m)}" data-k="cacheRead" value="${p.cacheRead != null ? p.cacheRead : ''}" placeholder="—">
-      <input type="number" step="0.001" min="0" data-m="${esc(m)}" data-k="cacheCreation" value="${p.cacheCreation != null ? p.cacheCreation : ''}" placeholder="—">
+      <input type="number" step="any" min="0" data-m="${esc(m)}" data-k="input" value="${p.input != null ? p.input : ''}" placeholder="—">
+      <input type="number" step="any" min="0" data-m="${esc(m)}" data-k="output" value="${p.output != null ? p.output : ''}" placeholder="—">
+      <input type="number" step="any" min="0" data-m="${esc(m)}" data-k="cacheRead" value="${p.cacheRead != null ? p.cacheRead : ''}" placeholder="—">
+      <input type="number" step="any" min="0" data-m="${esc(m)}" data-k="cacheCreation" value="${p.cacheCreation != null ? p.cacheCreation : ''}" placeholder="—">
     </div>`;
   }).join('');
-  $('#pricingMask').classList.add('on');
+  $$('#priceRows input').forEach((inp) => inp.setAttribute('aria-label', inp.dataset.m + ' ' + ({input:'输入',output:'输出',cacheRead:'缓存读取',cacheCreation:'缓存写入'}[inp.dataset.k]) + '单价'));
+  setDialog('pricingMask', true);
 }
 
 async function savePricing() {
+  if (!$('#priceRows input:invalid') && !$('#priceSave').disabled) {
+    $('#priceSave').disabled = true;
+  } else {
+    $('#priceRows input:invalid')?.reportValidity();
+    return;
+  }
   const out = {};
   $$('#priceRows input').forEach((inp) => {
     const m = inp.dataset.m, k = inp.dataset.k;
@@ -1580,29 +2051,29 @@ async function savePricing() {
     out[m] = out[m] || { input: null, output: null, cacheRead: null, cacheCreation: null };
     out[m][k] = val;
   });
-  const r = await fetchJSON('/api/pricing', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(out) });
-  if (r.status === 200) {
+  try {
+    const r = await fetchJSON('/api/pricing', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(out) });
+    if (r.status !== 200) throw new Error('保存失败');
     S.pricing = out;
-    $('#pricingMask').classList.remove('on');
-    toast('计价已保存，成本已重新计算');
-    render();
-  } else toast('保存失败');
+    setDialog('pricingMask', false);
+    toast('计价已保存');
+    render(false);
+  } catch { toast('保存失败，请重试'); }
+  finally { $('#priceSave').disabled = false; }
 }
 
 /* ============================================================
    8. 交互
    ============================================================ */
-function setRange(key) {
-  const now = Date.now();
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  if (key === 'all') S.range = { key, from: 0, to: Number.MAX_SAFE_INTEGER };
-  else if (key === 'today') S.range = { key, from: today.getTime(), to: now };
-  else if (key === '7d') S.range = { key, from: today.getTime() - 6 * DAY, to: now };
-  else if (key === '30d') S.range = { key, from: today.getTime() - 29 * DAY, to: now };
-  $$('#rangePills .pill').forEach((p) => p.classList.toggle('on', p.dataset.range === key));
-  if (S.view === 'agent') render();
-  else { renderOverview(); renderSources(); replay($('#overview')); attachTilts(); }
+function syncRangePills(key = S.range.key) {
+  $$('#rangePills .pill, #modelRankRangePills .pill').forEach((p) => p.classList.toggle('on', p.dataset.range === key));
+}
+
+function setRange(key, { keepRanking = false } = {}) {
+  S.range = calendarRange(key);
+  syncRangePills(key);
+  render(false);
+  if (keepRanking) scrollToModelRanking();
 }
 
 function toast(msg) {
@@ -1614,114 +2085,170 @@ function toast(msg) {
 
 async function refresh() {
   const btn = $('#btnRefresh');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  btn.setAttribute('aria-busy', 'true');
   btn.classList.add('spin');
+  const beforeData = S.data || { agents: {} };
+  $('#refreshDelta').textContent = '正在读取数据源…';
   toast('正在重新读取所有数据源…');
-  await fetchJSON('/api/refresh');
-  const t0 = Date.now();
-  while (Date.now() - t0 < 180000) {
-    const { body } = await fetchJSON('/api/status');
-    if (body && body.phase === 'ready') break;
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  const { body } = await fetchJSON('/api/data');
-  if (body && body.agents) {
+  try {
+    const start = await fetchJSON('/api/refresh');
+    if (start.status !== 200) throw new Error('无法开始扫描');
+    const t0 = Date.now();
+    while (true) {
+      const { status, body } = await fetchJSON('/api/status');
+      if (status !== 200 || body?.phase === 'error') throw new Error('扫描失败');
+      $('#refreshDelta').textContent = `正在读取 ${body.done || 0}/${body.total || 10} 个来源…`;
+      if (body?.phase === 'ready') break;
+      if (Date.now() - t0 >= 180000) throw new Error('读取超时，请稍后重试');
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    const { body } = await fetchJSON('/api/data');
+    if (!body?.agents) throw new Error('没有拿到扫描结果');
+    const previousMetrics = new Map($$('[data-metric]').filter(el => el.matches('#heroTotal,.tile .v,.agent .val')).map(el => [el.dataset.metric, el.dataset.v || el.textContent]));
     S.data = body;
     S.pricing = body.pricing || {};
-    render();
-    toast('读取完成：' + exact(Object.values(body.agents).reduce((s, a) => s + a.records.length, 0)) + ' 条记录');
+    if (S.range.key !== 'all' && S.range.key !== 'custom') setRange(S.range.key);
+    else render(false);
+    const cutoff = Date.now();
+    const todayBefore = buildDailyInsight(Object.values(beforeData.agents), cutoff).days[6].tokens;
+    const todayAfter = buildDailyInsight(visibleAgents(), cutoff).days[6].tokens;
+    const delta = todayAfter - todayBefore;
+    $('#refreshDelta').textContent = delta > 0 ? `今日新增 ${fmt(delta)} tokens` : delta < 0 ? `今日用量校正 −${fmt(-delta)} tokens` : '今日用量无变化';
+    $$('[data-metric]').filter(el => el.matches('#heroTotal,.tile .v,.agent .val')).forEach(el => {
+      if (previousMetrics.has(el.dataset.metric) && previousMetrics.get(el.dataset.metric) !== (el.dataset.v || el.textContent)) {
+        animateUI(el, '_refreshFlash', [{ backgroundColor: 'rgba(217,84,31,.18)' }, { backgroundColor: 'rgba(217,84,31,0)' }], { duration: 220, easing: 'cubic-bezier(.16,1,.3,1)' });
+      }
+    });
+    toast(delta > 0 ? '数据已更新 · 今日新增 ' + fmt(delta) + ' tokens' : '数据已更新');
+  } catch (err) {
+    $('#refreshDelta').textContent = '刷新失败，保留上次数据';
+    toast(err.message || '读取失败，请检查本地服务');
+  } finally {
+    btn.classList.remove('spin');
+    btn.disabled = false;
+    btn.removeAttribute('aria-busy');
   }
-  btn.classList.remove('spin');
 }
 
-$('#rangePills').addEventListener('click', (e) => {
+function setDialog(id, open) {
+  const mask = $('#' + id);
+  if (open === mask.classList.contains('on')) return;
+  if (open) {
+    mask._returnFocus = document.activeElement;
+    setTweaks(false);
+  }
+  mask.inert = !open;
+  mask.setAttribute('aria-hidden', String(!open));
+  mask.classList.toggle('on', open);
+  const anyOpen = !!$('.mask.on');
+  $('.shell').inert = anyOpen;
+  $('.tweaks').inert = anyOpen;
+  document.body.classList.toggle('dialog-open', anyOpen);
+  if (open) ($('input,button', mask) || $('.modal', mask)).focus({preventScroll:true});
+  else if (mask._returnFocus?.isConnected) mask._returnFocus.focus({preventScroll:true});
+}
+
+function setTweaks(open) {
+  const panel = $('#tweakPanel');
+  panel.classList.toggle('on', open);
+  panel.inert = !open;
+  panel.setAttribute('aria-hidden', String(!open));
+  $('#btnTweaks').setAttribute('aria-expanded', String(open));
+}
+
+let customRangeKeepRanking = false;
+function openCustomRange(keepRanking) {
+  customRangeKeepRanking = keepRanking;
+  const iso = (d) => { const p = (x) => String(x).padStart(2, '0'); return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()); };
+  const min = S.data ? recordBounds(Object.values(S.data.agents)).min : Date.now();
+  $('#dateFrom').value = iso(new Date(S.range.key === 'custom' ? S.range.from : min));
+  $('#dateTo').value = iso(new Date(S.range.key === 'custom' ? S.range.to : Date.now()));
+  setDialog('customMask', true);
+}
+function isModelRankingHeaderVisible() {
+  return S.view === 'overview' && isVisibleInViewport($('#modelRankSticky'));
+}
+function handleRangePillClick(e, fromRanking) {
   const b = e.target.closest('.pill');
   if (!b) return;
   const k = b.dataset.range;
+  const keepRanking = fromRanking || isModelRankingHeaderVisible();
   if (k === 'custom') {
-    const iso = (d) => { const p = (x) => String(x).padStart(2, '0'); return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()); };
-    const ts = S.data ? Object.values(S.data.agents).flatMap((a) => a.records).map((r) => r.t) : [Date.now()];
-    $('#dateFrom').value = iso(new Date(Math.min(...ts)));
-    $('#dateTo').value = iso(new Date());
-    $('#customMask').classList.add('on');
+    openCustomRange(keepRanking);
     return;
   }
-  setRange(k);
-});
-$('#dateCancel').addEventListener('click', () => $('#customMask').classList.remove('on'));
+  setRange(k, { keepRanking });
+}
+$('#rangePills').addEventListener('click', (e) => handleRangePillClick(e, false));
+$('#modelRankRangePills').addEventListener('click', (e) => handleRangePillClick(e, true));
+$('#dateCancel').addEventListener('click', () => setDialog('customMask', false));
 $('#dateApply').addEventListener('click', () => {
   const f = new Date($('#dateFrom').value + 'T00:00:00');
   const t = new Date($('#dateTo').value + 'T23:59:59.999');
   if (isNaN(f) || isNaN(t) || f > t) { toast('时间范围不合法'); return; }
   S.range = { key: 'custom', from: f.getTime(), to: t.getTime() };
-  $$('#rangePills .pill').forEach((p) => p.classList.toggle('on', p.dataset.range === 'custom'));
-  $('#customMask').classList.remove('on');
-  render();
+  syncRangePills('custom');
+  setDialog('customMask', false);
+  render(false);
+  if (customRangeKeepRanking) scrollToModelRanking();
 });
 $('#btnRefresh').addEventListener('click', refresh);
 $('#btnPricing').addEventListener('click', openPricing);
-$('#heroPricingHint').addEventListener('click', openPricing);
-$('#priceCancel').addEventListener('click', () => $('#pricingMask').classList.remove('on'));
+$('#priceCancel').addEventListener('click', () => setDialog('pricingMask', false));
 $('#priceSave').addEventListener('click', savePricing);
-$('#pricingMask').addEventListener('click', (e) => { if (e.target.id === 'pricingMask') e.currentTarget.classList.remove('on'); });
-$('#customMask').addEventListener('click', (e) => { if (e.target.id === 'customMask') e.currentTarget.classList.remove('on'); });
-
-/* 模型排行：范围 / 对比条刻度 / 展开 */
-function bindRankSeg(sel, apply) {
-  const el = $(sel);
-  if (!el) return;
-  el.addEventListener('click', (e) => {
-    const b = e.target.closest('button');
-    if (!b) return;
-    $$('button', el).forEach((x) => x.classList.remove('on'));
-    b.classList.add('on');
-    apply(b);
-    renderModelRank();
-  });
-}
-bindRankSeg('#rankScale', (b) => { S.rankScale = b.dataset.k; });
-$('#rankFoot').addEventListener('click', (e) => {
-  if (!e.target.closest('#rankToggle')) return;
-  S.rankExpand = !S.rankExpand;
-  renderModelRank();
-});
+$$('.mask').forEach((mask) => mask.addEventListener('click', (e) => { if (e.target === mask) setDialog(mask.id, false); }));
 
 /* 动效开关 */
-$('#btnTweaks').addEventListener('click', () => $('#tweakPanel').classList.toggle('on'));
-function bindSwitch(sel, key, apply) {
-  const el = $(sel);
-  el.addEventListener('click', () => {
-    S.fx[key] = !S.fx[key];
-    el.classList.toggle('on', S.fx[key]);
-    apply(S.fx[key]);
-  });
+$('#btnTweaks').addEventListener('click', () => setTweaks(!$('#tweakPanel').classList.contains('on')));
+document.addEventListener('click', (e) => { if (!e.target.closest('.tweaks')) setTweaks(false); });
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+function applyMotionPreference() {
+  const calm = reducedMotion.matches || S.fx.calm;
+  document.body.classList.toggle('calm', calm);
+  $('#tgCalm').classList.toggle('on', calm);
+  $('#tgCalm').setAttribute('aria-checked', String(calm));
+  if (calm) {
+    settleUIAnimations();
+    finishViewBridges();
+    $$('#overview,#detail').forEach((el) => el._viewAnimation?.cancel());
+  }
 }
-bindSwitch('#tgTilt', 'tilt', (on) => { document.body.classList.toggle('nofx', !on); });
-bindSwitch('#tgGlow', 'glow', (on) => {
-  $('.sheen').style.display = on ? '' : 'none';
-  $('.aurora').style.display = on ? '' : 'none';
+$('#tgCalm').addEventListener('click', () => {
+  S.fx.calm = !S.fx.calm;
+  try { localStorage.setItem('token-viewer-calm', String(S.fx.calm)); } catch { /* 存储不可用 */ }
+  applyMotionPreference();
 });
-bindSwitch('#tgNumbers', 'numbers', () => {});
-bindSwitch('#tgCalm', 'calm', (on) => {
-  document.body.classList.toggle('calm', on);
-  if (on) { $('.sheen').style.animationPlayState = 'paused'; $('.aurora').querySelectorAll('b').forEach(b => b.style.animationPlayState = 'paused'); }
-  else { $('.sheen').style.animationPlayState = ''; $('.aurora').querySelectorAll('b').forEach(b => b.style.animationPlayState = ''); }
-});
-if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
-  S.fx.calm = true;
-  document.body.classList.add('calm');
-  $('#tgCalm').classList.add('on');
-}
+try { S.fx.calm = localStorage.getItem('token-viewer-calm') === 'true'; } catch { /* 存储不可用 */ }
+reducedMotion.addEventListener('change', applyMotionPreference);
+applyMotionPreference();
 
 addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    $('#pricingMask').classList.remove('on');
-    $('#customMask').classList.remove('on');
-    $('#tweakPanel').classList.remove('on');
+    const mask = $('.mask.on');
+    if (mask) { setDialog(mask.id, false); return; }
+    if ($('#tweakPanel').classList.contains('on')) { setTweaks(false); $('#btnTweaks').focus(); return; }
     if (S.view === 'agent') backToOverview();
+  }
+  if (e.key === 'Tab' && $('.mask.on')) {
+    const items = $$('input,button,[tabindex="0"]', $('.mask.on')).filter((el) => !el.disabled);
+    const first = items[0], last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
   }
   if ((e.key === 'r' || e.key === 'R') && (e.metaKey || e.ctrlKey)) { e.preventDefault(); refresh(); }
 });
 
+function checkCalendarRollover() {
+  if (!S.data || document.hidden) return;
+  if (S.range.key === 'today' && dayKey(S.range.from) !== dayKey(Date.now())) {
+    setRange('today');
+    $('#refreshDelta').textContent = '已进入新的一天，请刷新今日数据';
+  }
+}
+document.addEventListener('visibilitychange', checkCalendarRollover);
+setInterval(checkCalendarRollover, 60000);
 bootSequence();
 </script>
 </body>

@@ -7,7 +7,7 @@
  * 端口：3457（可用 TOKEN_VIEWER_PORT 覆盖）
  *
  * 接入数据源：
- *   Proma / Pi / oh-my-Pi / Claude Code / Claude Desktop /
+ *   Mirage / Pi / oh-my-Pi / Claude Code / Claude Desktop /
  *   Codex / ZCode / DeepSeek Harness / OpenCode
  *
  * 用法：
@@ -26,10 +26,24 @@ const readline = require('readline');
 const PORT = Number(process.env.TOKEN_VIEWER_PORT || 3457);
 const HOME = os.homedir();
 const ROOT = __dirname;
-const CACHE_FILE = path.join(ROOT, '.scan-cache.json');
-const PRICING_FILE = path.join(ROOT, 'pricing-config.json');
+// 网页版仍写项目目录；桌面版使用 Electron 的可写用户数据目录。
+const DATA_ROOT = process.env.TOKEN_VIEWER_DATA_DIR ? path.resolve(process.env.TOKEN_VIEWER_DATA_DIR) : ROOT;
+const AUTH_TOKEN = process.env.TOKEN_VIEWER_AUTH_TOKEN || '';
+const CACHE_FILE = path.join(DATA_ROOT, '.scan-cache.json');
+// 解析规则改变后，历史文件也必须重读，不能只靠 mtime / size 判断。
+const CACHE_VERSION = 5;
+const PRICING_FILE = path.join(DATA_ROOT, 'pricing-config.json');
 const LOCALAPPDATA = process.env.LOCALAPPDATA || path.join(HOME, 'AppData', 'Local');
 const APPDATA = process.env.APPDATA || path.join(HOME, 'AppData', 'Roaming');
+function resolveHomePath(value, fallback) {
+  if (typeof value !== 'string' || !value.trim()) return path.resolve(fallback);
+  const selected = value.trim();
+  return path.resolve(selected === '~' ? HOME : /^~[/\\]/.test(selected) ? path.join(HOME, selected.slice(2)) : selected);
+}
+/** Claude 可通过 CLAUDE_CONFIG_DIR 迁移配置、会话历史与插件目录。 */
+const CLAUDE_CONFIG_HOME = resolveHomePath(process.env.CLAUDE_CONFIG_DIR, path.join(HOME, '.claude'));
+const CLAUDE_PROJECTS_ROOT = path.join(CLAUDE_CONFIG_HOME, 'projects');
+const CLAUDE_STATS_FILE = path.join(CLAUDE_CONFIG_HOME, 'stats-cache.json');
 
 /* ------------------------------------------------------------------ *
  * 跨平台应用数据目录
@@ -47,8 +61,12 @@ const dataCandidates = (name) => DATA_DIRS.map((d) => path.join(d, name));
 const CLAUDE_DESKTOP_ROOTS = [...dataCandidates('Claude-3p'), ...dataCandidates('Claude')];
 /** DeepSeek Harness 桌面版 */
 const DSH_DESKTOP_ROOTS = [...dataCandidates('dsh-desktop'), ...dataCandidates('deepseek-harness-desktop')];
-/** DeepSeek Harness CLI home（与上游 dsh-home-paths 一致，支持 DSH_HOME 覆盖） */
-const DSH_CLI_HOME = process.env.DSH_HOME || path.join(HOME, '.dsh');
+/** 官方桌面端与 CLI 共用 home；Electron 的 profiles/desktop 不保存会话。 */
+function resolveDshHome(value = process.env.DSH_HOME) {
+  const selected = value?.trim() ? value : path.join(HOME, '.dsh');
+  return path.resolve(selected === '~' ? HOME : /^~[/\\]/.test(selected) ? path.join(HOME, selected.slice(2)) : selected);
+}
+const DSH_CLI_HOME = resolveDshHome();
 /** Qoder：CLI 与桌面 App 共用 `~/.qoder`（支持 QODER_HOME 覆盖），App 是 Electron 壳 */
 const QODER_CLI_HOME = process.env.QODER_HOME || path.join(HOME, '.qoder');
 /** Qoder 桌面 App 的 userData 目录（Windows/Linux 命名差异见 dataCandidates） */
@@ -117,7 +135,7 @@ async function readLines(file, onLine, preFilter) {
       const s = raw.trim();
       if (!s) continue;
       if (preFilter && !preFilter(s)) continue;
-      try { onLine(s); } catch { /* 忽略单行异常 */ }
+      try { if (onLine(s) === false) break; } catch { /* 忽略单行异常 */ }
     }
   } catch { /* 忽略读取中断 */ }
   finally { rl.close(); stream.destroy(); }
@@ -177,14 +195,14 @@ async function scanOneFileCached(file, handler, finish, stats, preFilter) {
   stats.files++;
   stats.bytes += st.size;
   const hit = cache[file];
-  if (hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size && Array.isArray(hit.records)) {
+  if (hit && hit.version === CACHE_VERSION && hit.mtimeMs === st.mtimeMs && hit.size === st.size && Array.isArray(hit.records)) {
     scanCacheNext[file] = hit;
     stats.reused++;
     stats.records += hit.records.length;
     return hit.records;
   }
   const recs = await scanOneFile(file, handler, finish, preFilter);
-  scanCacheNext[file] = { mtimeMs: st.mtimeMs, size: st.size, records: recs };
+  scanCacheNext[file] = { version: CACHE_VERSION, mtimeMs: st.mtimeMs, size: st.size, records: recs };
   stats.parsed++;
   stats.records += recs.length;
   return recs;
@@ -204,24 +222,31 @@ async function scanWithCache(files, handler, finish, stats, preFilter) {
 /* 各数据源适配器                                                       */
 /* ------------------------------------------------------------------ */
 
+/** Claude 会话文件里的主会话 id；subagents 归到其父会话。 */
+function claudeFileSessionId(file) {
+  const parts = path.resolve(file).split(path.sep);
+  const projectsAt = parts.lastIndexOf('projects');
+  if (projectsAt >= 0) {
+    const rel = parts.slice(projectsAt + 1);
+    if (rel.length >= 3 && /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(rel[1])) return rel[1];
+  }
+  return path.basename(file, '.jsonl');
+}
+
 /** Claude Code 格式行解析（CLI 与 Claude Desktop 沙箱共用） */
 function ccLineHandler(o, st) {
   if (o.type !== 'assistant') return null;
   const u = o.message && o.message.usage;
   if (!u) return null;
-  const id = (o.message && o.message.id) || o.uuid;
-  if (id) {
-    if (!st.seen) st.seen = new Set();
-    if (st.seen.has(id)) return null;
-    st.seen.add(id);
-  }
-  return norm({
+  const id = (o.message && o.message.id) || o.requestId || o.uuid || '';
+  const rec = norm({
     t: toMs(o.timestamp),
     m: (o.message && o.message.model) || 'unknown',
     i: num(u.input_tokens), o: num(u.output_tokens),
     cr: num(u.cache_read_input_tokens), cw: num(u.cache_creation_input_tokens), r: 0,
-    s: o.sessionId || path.basename(st.file, '.jsonl'),
+    s: o.sessionId || claudeFileSessionId(st.file),
   });
+  return rec ? { ...rec, requestId: String(id) } : null;
 }
 
 /** Pi / oh-my-Pi 共用行解析 */
@@ -280,22 +305,7 @@ function zcodeLineHandler(o, st) {
   });
 }
 
-/** Proma 会话索引里的标题 */
-/** 只读文件头部若干字节（取标题用，不整文件载入） */
-async function readHead(file, bytes = 65536) {
-  let fh = null;
-  try {
-    fh = await fsp.open(file, 'r');
-    const len = Math.min((await fh.stat()).size, bytes);
-    if (len <= 0) return '';
-    const b = Buffer.alloc(len);
-    await fh.read(b, 0, len, 0);
-    return b.toString('utf8');
-  } catch { return ''; }
-  finally { try { if (fh) await fh.close(); } catch { /* 忽略 */ } }
-}
-
-/** 会话文件头部信息缓存：标题与 cwd 不会变，避免每次刷新重读 */
+/** 文件变化后重取元信息，避免把空标题或旧标题永久缓存。 */
 const headMetaCache = new Map();
 
 /**
@@ -308,23 +318,28 @@ const headMetaCache = new Map();
 async function sessionMetaFromFiles(files, opts) {
   const out = {};
   for (const file of files) {
+    let stat;
+    try { stat = await fsp.stat(file); } catch { continue; }
     let hit = headMetaCache.get(file);
-    if (!hit) {
-      hit = { title: '', cwd: '' };
-      const head = await readHead(file);
+    if (!hit || hit.size !== stat.size || hit.mtimeMs !== stat.mtimeMs) {
+      hit = { title: '', cwd: '', size: stat.size, mtimeMs: stat.mtimeMs };
       let firstObj = null;
-      for (const raw of head.split('\n')) {
-        if (!raw.trim()) continue;
+      // 流式找首条真实输入；宿主上下文可能超过 64KB，不能截断文件头。
+      await readLines(file, (raw) => {
+        if (firstObj && !/"(?:user|user_message|session_info|custom-title|summary)"/.test(raw)) return;
         const o = tryJson(raw);
-        if (!o) continue;
+        if (!o) return;
         if (!firstObj) firstObj = o;
-        if (!hit.cwd && typeof o.cwd === 'string') hit.cwd = o.cwd;
+        const cwd = o.cwd || (o.payload && o.payload.cwd);
+        if (!hit.cwd && typeof cwd === 'string') hit.cwd = cwd;
+        const named = o.type === 'session_info' ? o.name : o.type === 'custom-title' ? o.customTitle : '';
+        if (typeof named === 'string' && named.trim()) hit.title = named.trim();
         if (!hit.title) {
           const text = opts.userTextOf(o);
-          if (text && !(opts.skip && opts.skip(text))) hit.title = text.slice(0, 60);
+          if (text && !isHostContext(text) && !(opts.skip && opts.skip(text))) hit.title = text.replace(/\s+/g, ' ').slice(0, 100);
         }
-        if (hit.cwd && hit.title) break;
-      }
+      });
+      if (!hit.title && opts.fallbackTitleOf) hit.title = opts.fallbackTitleOf(firstObj) || '';
       hit.sid = opts.sidOf ? opts.sidOf(file, firstObj) : path.basename(file, '.jsonl');
       headMetaCache.set(file, hit);
     }
@@ -336,6 +351,10 @@ async function sessionMetaFromFiles(files, opts) {
     }
   }
   return out;
+}
+
+function isHostContext(text) {
+  return /^(?:# AGENTS\.md instructions|<environment_context>|<permissions instructions>|<INSTRUCTIONS>|\[QODER_LIVE_VOICE_CONTEXT\])/i.test(text.trim());
 }
 
 /** Pi 家族（Pi / oh-my-Pi）的会话 id：主取 session 行的 id，同时登记文件名与其 uuid 后缀作别名 */
@@ -369,22 +388,33 @@ function piUserInputText(o) {
   return c.filter((p) => p && p.type === 'text' && p.text).map((p) => p.text).join('\n').trim();
 }
 
-/** Proma 会话文件→session_id 集合的缓存（与 headMetaCache 分开，值类型不同） */
-const promaSidByFile = new Map();
+/** Mirage 会话文件→session_id 集合的缓存（与 headMetaCache 分开，值类型不同） */
+const mirageSidByFile = new Map();
+const MIRAGE_HOME = path.join(HOME, '.mirage');
+
+function dedupeMirageRecords(records) {
+  const unique = new Map();
+  for (const r of records) {
+    const key = r.requestId || JSON.stringify([r.s, r.t, r.m, r.i, r.o, r.cr, r.cw]);
+    const prev = unique.get(key);
+    if (!prev || r.i + r.o + r.cr + r.cw > prev.i + prev.o + prev.cr + prev.cw) unique.set(key, r);
+  }
+  return [...unique.values()].map(({ requestId, ...r }) => r);
+}
 /** 从原始行里快速抽 session_id，避开整行 JSON.parse */
 const SID_RE = /"session_id"\s*:\s*"([^"]+)"/;
 
 /**
- * Proma 会话标题。
+ * Mirage 会话标题。
  * 关键：会话 jsonl 里的 `session_id` 是索引条目的 **`sdkSessionId`**，不是 `id`；
  * 只按 `id` 建索引会一条也匹不上。另有少量会话的 `sdkSessionId` 没写回索引，
  * 但文件名就是它的 `id`，所以再用「文件名 → 索引 id」读一次首行补映射。
  */
-async function promaSessionMeta() {
+async function mirageSessionMeta(home = path.join(HOME, '.mirage')) {
   const out = {};
   let list = [];
   try {
-    const d = JSON.parse(await fsp.readFile(path.join(HOME, '.proma', 'agent-sessions.json'), 'utf8'));
+    const d = JSON.parse(await fsp.readFile(path.join(home, 'agent-sessions.json'), 'utf8'));
     const sess = d && d.sessions;
     if (Array.isArray(sess)) list = sess;
     else if (sess && typeof sess === 'object') list = Object.values(sess);
@@ -394,52 +424,102 @@ async function promaSessionMeta() {
   for (const s of list) {
     if (!s || typeof s !== 'object') continue;
     const meta = { title: s.title || s.name || s.summary || '', cwd: s.cwd || '' };
-    // 主键：SDK 会话 id（与记录里的 session_id 同一体系）；别名：Proma 内部 id
+    // 主键：SDK 会话 id（与记录里的 session_id 同一体系）；别名：Mirage 内部 id
     if (s.sdkSessionId) out[s.sdkSessionId] = meta;
     if (s.id) { byId[s.id] = meta; if (!out[s.id]) out[s.id] = meta; }
   }
 
   // 补漏：索引里没登记 sdkSessionId 的会话，用文件名（= 内部 id）反查条目。
   // 一个文件可能因续聊/恢复出现**多个** session_id，所以必须全文收集，不能只看头部。
-  const files = await walk(path.join(HOME, '.proma', 'agent-sessions'), (p, n) => n.endsWith('.jsonl'), 0, 2);
+  const files = await walk(path.join(home, 'agent-sessions'), (p, n) => n.endsWith('.jsonl'), 0, 2);
   for (const file of files) {
     const fname = path.basename(file, '.jsonl');
     const meta = byId[fname];
     if (!meta) continue;
-    let sids = promaSidByFile.get(file);
-    if (!sids) {
-      sids = new Set();
+    const stat = await fsp.stat(file).catch(() => null);
+    if (!stat) continue;
+    let hit = mirageSidByFile.get(file);
+    if (!hit || hit.size !== stat.size || hit.mtimeMs !== stat.mtimeMs) {
+      hit = { ids: new Set(), size: stat.size, mtimeMs: stat.mtimeMs };
       // 只跑一次正则，不做 JSON.parse：这里要扫全部会话文件，成本敏感
       await readLines(file, (line) => {
         const m = SID_RE.exec(line);
-        if (m) sids.add(m[1]);
+        if (m) hit.ids.add(m[1]);
       }, hasAny('"session_id"'));
-      promaSidByFile.set(file, sids);
+      mirageSidByFile.set(file, hit);
     }
-    for (const sid of sids) if (!out[sid]) out[sid] = meta;
+    for (const sid of hit.ids) if (!out[sid]) out[sid] = meta;
   }
   return out;
 }
 
-/** Claude Desktop 会话声明（用于跨源去重） */
-async function collectClaims() {
-  const roots = CLAUDE_DESKTOP_ROOTS.filter(isDir)
-    .flatMap((b) => [path.join(b, 'local-agent-mode-sessions'), path.join(b, 'claude-code-sessions')]);
-  const locals = [];
-  for (const r of roots) locals.push(...(await walk(r, (p, n) => /^local_.+\.json$/.test(n), 0, 6)));
-  const cliIds = new Set();
-  const map = {};
-  const meta = {};
-  for (const f of locals) {
+/** 按规范化真实路径去重，避免重叠 roots / junction 把同一日志读两次。 */
+async function uniqueRealFiles(files) {
+  const out = [], seen = new Set();
+  for (const file of files) {
+    let key;
+    try { key = await fsp.realpath(file); } catch { continue; }
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(file);
+  }
+  return out;
+}
+
+/** Claude Desktop 的 local_* 声明：两个目录分别代表 Cowork 与桌面 Code 标签页。 */
+async function collectClaims(desktopRoots = CLAUDE_DESKTOP_ROOTS) {
+  const scopes = [];
+  for (const base of desktopRoots || []) {
+    scopes.push({ root: path.join(base, 'claude-code-sessions'), kind: 'code' });
+    scopes.push({ root: path.join(base, 'local-agent-mode-sessions'), kind: 'cowork' });
+  }
+  const claimFiles = [];
+  for (const scope of scopes) {
+    if (!isDir(scope.root)) continue;
+    const files = await walk(scope.root, (p, n) => /^local_.+\.json$/i.test(n), 0, 3);
+    for (const file of files) claimFiles.push({ file, kind: scope.kind });
+  }
+  const unique = await uniqueRealFiles(claimFiles.map((x) => x.file));
+  const uniqueSet = new Set(unique);
+  const candidates = [];
+  for (const item of claimFiles) {
+    if (!uniqueSet.has(item.file)) continue;
+    uniqueSet.delete(item.file);
     try {
-      const o = JSON.parse(await fsp.readFile(f, 'utf8'));
-      if (!o || !o.sessionId) continue;
-      map[o.sessionId] = o.cliSessionId || null;
-      if (o.cliSessionId) cliIds.add(o.cliSessionId);
-      meta[o.sessionId] = { title: o.title || '', cwd: o.cwd || '', model: o.model || '' };
+      const [text, stat] = await Promise.all([fsp.readFile(item.file, 'utf8'), fsp.stat(item.file)]);
+      const o = JSON.parse(text);
+      if (!o || typeof o !== 'object') continue;
+      const localId = o.sessionId || path.basename(item.file, '.json');
+      if (!localId) continue;
+      candidates.push({
+        localId, cliId: typeof o.cliSessionId === 'string' && o.cliSessionId ? o.cliSessionId : '',
+        kind: item.kind, mtimeMs: stat.mtimeMs, file: item.file,
+        meta: { title: o.title || '', cwd: o.cwd || '', model: o.model || '' },
+      });
     } catch { /* 忽略坏文件 */ }
   }
-  return { cliIds, map, meta, roots, locals };
+  // 旧副本可能在目录迭代中更晚出现，按 mtime 应用，确保新声明的标题与映射获胜。
+  candidates.sort((a, b) => a.mtimeMs - b.mtimeMs || a.file.localeCompare(b.file));
+  const byLocal = new Map();
+  for (const candidate of candidates) byLocal.set(candidate.localId, candidate);
+
+  const localToCli = new Map(), kindById = new Map(), meta = {}, cliIds = new Set();
+  const cliWinners = new Map();
+  for (const claim of byLocal.values()) {
+    if (claim.cliId) {
+      localToCli.set(claim.localId, claim.cliId);
+      const prior = cliWinners.get(claim.cliId);
+      if (!prior || claim.mtimeMs >= prior.mtimeMs) cliWinners.set(claim.cliId, claim);
+      cliIds.add(claim.cliId);
+    } else localToCli.set(claim.localId, '');
+    kindById.set(claim.localId, claim.kind);
+    meta[claim.localId] = { ...claim.meta };
+  }
+  for (const [cliId, claim] of cliWinners) {
+    kindById.set(cliId, claim.kind);
+    meta[cliId] = { ...claim.meta };
+  }
+  return { cliIds, localToCli, kindById, meta, scopes: scopes.map((s) => s.root), locals: [...byLocal.values()] };
 }
 
 /** 打开只读 SQLite（需要 node:sqlite） */
@@ -456,55 +536,345 @@ function dayKeyLocal(ts) {
   return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
 }
 
-/**
- * Claude Code 自带的按天统计缓存。
- * 会话 jsonl 会被自动清理，但这个缓存里还留着每天每个模型的 token 合计，
- * 因此历史总量比扫文件完整得多。四类拆分按该模型的全局比例估算。
- */
-async function claudeStatsRecords() {
-  const out = { records: [], days: new Set() };
-  let d;
-  try { d = JSON.parse(await fsp.readFile(path.join(HOME, '.claude', 'stats-cache.json'), 'utf8')); }
+const CLAUDE_STAT_KEYS = ['files', 'bytes', 'reused', 'parsed'];
+const emptyClaudeStats = () => ({ files: 0, bytes: 0, reused: 0, parsed: 0, records: 0 });
+function addClaudeStats(target, source) {
+  for (const key of Object.keys(emptyClaudeStats())) target[key] = (target[key] || 0) + (source[key] || 0);
+}
+function claudeStatsView(stats) {
+  return Object.fromEntries(CLAUDE_STAT_KEYS.map((key) => [key, stats[key] || 0]));
+}
+
+function claudeUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(value || '');
+}
+
+/** 仅匹配 projects 下的会话文件及已知的 session/subagents 层级。 */
+function isClaudeProjectJsonl(file, projectsRoot) {
+  if (!file.toLowerCase().endsWith('.jsonl')) return false;
+  const rel = path.relative(projectsRoot, file);
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return false;
+  const parts = rel.split(path.sep);
+  if (parts.length === 2) return true; // <project>/<session>.jsonl
+  if (parts.length === 3 && claudeUuid(parts[1])) return true; // <project>/<session>/<session-data>.jsonl
+  return parts.length === 4 && claudeUuid(parts[1]) && parts[2] === 'subagents';
+}
+
+async function claudeProjectFiles(projectsRoots) {
+  const found = [];
+  for (const root of projectsRoots) {
+    if (!isDir(root)) continue;
+    const files = await walk(root, (p, n) => n.toLowerCase().endsWith('.jsonl'), 0, 8);
+    for (const file of files) if (isClaudeProjectJsonl(file, root)) found.push({ file, kindHint: 'code' });
+  }
+  return found;
+}
+
+function sandboxProjectsRoot(file) {
+  const full = path.resolve(file);
+  const { root } = path.parse(full);
+  const parts = full.slice(root.length).split(path.sep);
+  const claudeAt = parts.lastIndexOf('.claude');
+  if (claudeAt < 0 || parts[claudeAt + 1] !== 'projects') return '';
+  return path.join(root, ...parts.slice(0, claudeAt + 2));
+}
+
+async function claudeSandboxFiles(desktopRoots) {
+  const found = [];
+  for (const base of desktopRoots || []) {
+    for (const scope of [
+      { root: path.join(base, 'claude-code-sessions'), kind: 'code' },
+      { root: path.join(base, 'local-agent-mode-sessions'), kind: 'cowork' },
+    ]) {
+      if (!isDir(scope.root)) continue;
+      const files = await walk(scope.root, (p, n) => n.toLowerCase().endsWith('.jsonl'), 0, 10);
+      for (const file of files) {
+        const projectsRoot = sandboxProjectsRoot(file);
+        if (!projectsRoot || !isClaudeProjectJsonl(file, projectsRoot)) continue;
+        found.push({ file, kindHint: scope.kind });
+      }
+    }
+  }
+  return found;
+}
+
+async function uniqueClaudeEntries(entries) {
+  const uniqueFiles = await uniqueRealFiles(entries.map((entry) => entry.file));
+  const allowed = new Set(uniqueFiles);
+  const seen = new Set();
+  return entries.filter((entry) => {
+    if (!allowed.has(entry.file) || seen.has(entry.file)) return false;
+    seen.add(entry.file);
+    return true;
+  });
+}
+
+function claudeCanonicalSession(id, claims) {
+  return claims.localToCli.get(id) || id;
+}
+
+function claudeKindForSession(id, claims, fallback = 'code') {
+  return claims.kindById.get(id) || claims.kindById.get(claudeCanonicalSession(id, claims)) || fallback;
+}
+
+function claudeOutputKind(kind) { return kind === 'cowork' ? 'desktop' : 'code'; }
+
+function claudeGroupKey(kind, rec, session = rec.s) {
+  return JSON.stringify([kind, session, dayKeyLocal(rec.t), rec.m]);
+}
+
+function claudeTokenTotal(rec) { return rec.i + rec.o + rec.cr + rec.cw; }
+
+function splitClaudeInteger(total, modelUsage) {
+  const fields = ['inputTokens', 'outputTokens', 'cacheReadInputTokens', 'cacheCreationInputTokens'];
+  const raw = fields.map((field) => num(modelUsage && modelUsage[field]));
+  const denominator = raw.reduce((sum, value) => sum + value, 0);
+  const ratios = denominator > 0 ? raw.map((value) => value / denominator) : [1, 0, 0, 0];
+  const parts = ratios.map((ratio) => Math.floor(total * ratio));
+  let remaining = total - parts.reduce((sum, value) => sum + value, 0);
+  const order = ratios.map((ratio, index) => ({ index, remainder: total * ratio - parts[index] }))
+    .sort((a, b) => b.remainder - a.remainder || a.index - b.index);
+  for (let i = 0; i < remaining; i++) parts[order[i % order.length].index]++;
+  return parts;
+}
+
+/** Claude Code 的日缓存只补逐请求来源未覆盖的正差额。 */
+async function claudeStatsRecords(statsFile, actualRecords) {
+  const out = { records: [], days: new Set(), latestDay: '' };
+  let data;
+  try { data = JSON.parse(await fsp.readFile(statsFile, 'utf8')); }
   catch { return out; }
-  const mu = d.modelUsage || {};
-  const ratioOf = (model) => {
-    const m = mu[model];
-    if (!m) return null;
-    const i = num(m.inputTokens), o = num(m.outputTokens), cr = num(m.cacheReadInputTokens), cw = num(m.cacheCreationInputTokens);
-    const s = i + o + cr + cw;
-    return s > 0 ? { i: i / s, o: o / s, cr: cr / s, cw: cw / s } : null;
-  };
-  for (const e of (d.dailyModelTokens || [])) {
-    const day = e && e.date;
-    if (!day) continue;
-    out.days.add(day);
+  if (!data || typeof data !== 'object') return out;
+  const actual = new Map();
+  for (const rec of actualRecords) {
+    const key = JSON.stringify([dayKeyLocal(rec.t), rec.m]);
+    actual.set(key, (actual.get(key) || 0) + claudeTokenTotal(rec));
+  }
+  const usage = data.modelUsage || {};
+  const days = Array.isArray(data.dailyModelTokens) ? data.dailyModelTokens : [];
+  const cachedByDayModel = new Map();
+  for (const entry of days) {
+    const day = entry && typeof entry.date === 'string' ? entry.date.slice(0, 10) : '';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
     const ts = Date.parse(day + 'T12:00:00');
     if (!Number.isFinite(ts)) continue;
-    for (const [model, total] of Object.entries(e.tokensByModel || {})) {
-      const t = num(total);
-      if (t <= 0) continue;
-      const r = ratioOf(model) || { i: 1, o: 0, cr: 0, cw: 0 };
-      const rec = norm({
-        t: ts, m: model,
-        i: Math.round(t * r.i), o: Math.round(t * r.o),
-        cr: Math.round(t * r.cr), cw: Math.round(t * r.cw), r: 0,
-        s: 'claude-stats',
-      });
-      if (rec) out.records.push(rec);
+    out.days.add(day);
+    if (day > out.latestDay) out.latestDay = day;
+    for (const [model, totalValue] of Object.entries(entry.tokensByModel || {})) {
+      const key = JSON.stringify([day, model]);
+      const previous = cachedByDayModel.get(key);
+      cachedByDayModel.set(key, { day, ts, model, total: (previous?.total || 0) + num(totalValue) });
     }
+  }
+  for (const { day, ts, model, total: cachedTotal } of cachedByDayModel.values()) {
+    const total = Math.max(0, Math.round(cachedTotal));
+    const known = actual.get(JSON.stringify([day, model])) || 0;
+    const remainder = Math.max(0, total - Math.round(known));
+    if (!remainder) continue;
+    const [i, o, cr, cw] = splitClaudeInteger(remainder, usage[model]);
+    const rec = norm({ t: ts, m: model, i, o, cr, cw, r: 0, s: 'claude-stats' });
+    if (rec) out.records.push(rec);
   }
   return out;
 }
 
+/**
+ * Claude Code + Claude Desktop 单次扫描。共享 projects 日志归 Code，Cowork 声明的 cliSessionId
+ * 归 Desktop；raw 与 usage-ledger 按会话/日期/模型挑总量较完整的一组，永不相加。
+ */
+async function scanClaudeUsage({
+  projectsRoot = CLAUDE_PROJECTS_ROOT,
+  desktopRoots = CLAUDE_DESKTOP_ROOTS,
+  statsFile = CLAUDE_STATS_FILE,
+} = {}, stats) {
+  const projectRoots = [].concat(projectsRoot || []).filter(Boolean);
+  const roots = [].concat(desktopRoots || []).filter(Boolean);
+  const claims = await collectClaims(roots);
+  const codeStats = emptyClaudeStats(), desktopStats = emptyClaudeStats();
+  const outStats = { code: codeStats, desktop: desktopStats };
+
+  const sourceFiles = await uniqueClaudeEntries([
+    ...(await claudeProjectFiles(projectRoots)),
+    ...(await claudeSandboxFiles(roots)),
+  ]);
+  const rawRequests = new Map();
+  for (const entry of sourceFiles) {
+    const fileStats = emptyClaudeStats();
+    const recs = await scanOneFileCached(entry.file, ccLineHandler, null, fileStats, hasAny('"usage"')) || [];
+    const fileKinds = new Set();
+    for (const rec of recs) {
+      const kind = claudeKindForSession(rec.s, claims, entry.kindHint);
+      fileKinds.add(kind);
+      const session = claudeCanonicalSession(rec.s, claims);
+      const key = rec.requestId
+        ? `request:${rec.requestId}`
+        : `fingerprint:${JSON.stringify([session, rec.t, rec.m, rec.i, rec.o, rec.cr, rec.cw])}`;
+      const prior = rawRequests.get(key);
+      if (!prior || claudeTokenTotal(rec) > claudeTokenTotal(prior.rec)) {
+        rawRequests.set(key, { kind, session, rec });
+      }
+    }
+    if (!fileKinds.size) fileKinds.add(claudeKindForSession(claudeFileSessionId(entry.file), claims, entry.kindHint));
+    for (const kind of fileKinds) addClaudeStats(outStats[claudeOutputKind(kind)], fileStats);
+  }
+
+  const rawBuckets = new Map();
+  for (const value of rawRequests.values()) {
+    const rec = { ...value.rec, s: value.session };
+    const key = claudeGroupKey(value.kind, rec, value.session);
+    if (!rawBuckets.has(key)) rawBuckets.set(key, { kind: value.kind, session: value.session, records: [], total: 0 });
+    const bucket = rawBuckets.get(key);
+    bucket.records.push(rec);
+    bucket.total += claudeTokenTotal(rec);
+  }
+
+  const scopes = [];
+  for (const base of roots) {
+    scopes.push({ root: path.join(base, 'claude-code-sessions'), kind: 'code' });
+    scopes.push({ root: path.join(base, 'local-agent-mode-sessions'), kind: 'cowork' });
+  }
+  const ledgerEntries = [];
+  for (const scope of scopes) {
+    if (!isDir(scope.root)) continue;
+    const files = await walk(scope.root, (p, n) => n.toLowerCase().endsWith('.ndjson'), 0, 7);
+    for (const file of files) {
+      if (file.split(path.sep).some((part) => part.toLowerCase() === 'usage-ledger')) ledgerEntries.push({ file, kindHint: scope.kind });
+    }
+  }
+  const uniqueLedgers = await uniqueClaudeEntries(ledgerEntries);
+  const ledgerRows = new Map();
+  for (const entry of uniqueLedgers) {
+    const fileStats = emptyClaudeStats();
+    try { fileStats.bytes = (await fsp.stat(entry.file)).size; } catch { continue; }
+    fileStats.files = 1;
+    fileStats.parsed = 1;
+    const fileKinds = new Set();
+    await readLines(entry.file, (line) => {
+      const obj = tryJson(line);
+      if (!obj || !obj.models || typeof obj.models !== 'object') return;
+      const localId = obj.sessionId || entry.file.split(path.sep).reverse().find((part) => /^local_.+$/i.test(part)) || 'claude-desktop';
+      const fallback = claudeKindForSession(localId, claims, entry.kindHint);
+      const surface = String(obj.surface || '').toLowerCase();
+      const kind = surface === 'code' ? 'code' : surface === 'cowork' ? 'cowork' : fallback;
+      fileKinds.add(kind);
+      const session = claudeCanonicalSession(localId, claims);
+      const ts = toMs(obj.ts || obj.timestamp || obj.time);
+      for (const [model, modelUsage] of Object.entries(obj.models)) {
+        if (!modelUsage || typeof modelUsage !== 'object') continue;
+        const costValue = modelUsage.cost && typeof modelUsage.cost === 'object'
+          ? (modelUsage.cost.usd ?? modelUsage.cost.total)
+          : modelUsage.cost;
+        const rec = norm({
+          t: ts, m: model,
+          i: num(modelUsage.inputTokens), o: num(modelUsage.outputTokens),
+          cr: num(modelUsage.cacheReadTokens), cw: num(modelUsage.cacheWriteTokens), r: 0,
+          c: num(costValue), s: session,
+        });
+        if (!rec) continue;
+        const fp = JSON.stringify([kind, session, rec.t, rec.m, rec.i, rec.o, rec.cr, rec.cw, rec.c || 0]);
+        if (!ledgerRows.has(fp)) ledgerRows.set(fp, { kind, rec });
+      }
+    }, hasAny('"models"'));
+    if (!fileKinds.size) fileKinds.add(entry.kindHint);
+    for (const kind of fileKinds) addClaudeStats(outStats[claudeOutputKind(kind)], fileStats);
+  }
+
+  const ledgerBuckets = new Map();
+  for (const value of ledgerRows.values()) {
+    const key = claudeGroupKey(value.kind, value.rec);
+    if (!ledgerBuckets.has(key)) ledgerBuckets.set(key, { kind: value.kind, session: value.rec.s, records: [], total: 0 });
+    const bucket = ledgerBuckets.get(key);
+    bucket.records.push(value.rec);
+    bucket.total += claudeTokenTotal(value.rec);
+  }
+
+  const selected = [];
+  const allBucketKeys = new Set([...rawBuckets.keys(), ...ledgerBuckets.keys()]);
+  for (const key of allBucketKeys) {
+    const raw = rawBuckets.get(key), ledger = ledgerBuckets.get(key);
+    const chosen = !raw ? ledger : !ledger || raw.total >= ledger.total ? raw : ledger;
+    if (chosen) selected.push({ kind: chosen.kind, records: chosen.records });
+  }
+
+  const sessions = { code: {}, desktop: {} };
+  const fileMeta = await sessionMetaFromFiles(sourceFiles.map((entry) => entry.file), {
+    sidOf: (file, first) => first && first.sessionId ? first.sessionId : claudeFileSessionId(file),
+    userTextOf: firstUserInputText,
+  });
+  for (const [id, metadata] of Object.entries(fileMeta)) {
+    const canonical = claudeCanonicalSession(id, claims);
+    const kind = claudeKindForSession(id, claims, 'code');
+    sessions[claudeOutputKind(kind)][canonical] = metadata;
+  }
+  for (const [id, metadata] of Object.entries(claims.meta)) {
+    const kind = claims.kindById.get(id) || 'code';
+    sessions[claudeOutputKind(kind)][id] = { ...metadata };
+  }
+
+  const selectedRecords = selected.flatMap((bucket) => bucket.records);
+  const statsHistory = await claudeStatsRecords(statsFile, selectedRecords);
+  const codeRecords = selected.filter((bucket) => bucket.kind === 'code').flatMap((bucket) => bucket.records);
+  const desktopRecords = selected.filter((bucket) => bucket.kind === 'cowork').flatMap((bucket) => bucket.records);
+  for (const bucket of selected) {
+    const target = sessions[claudeOutputKind(bucket.kind)];
+    for (const rec of bucket.records) {
+      if (!target[rec.s]) target[rec.s] = claims.meta[rec.s] || fileMeta[rec.s] || { title: '' };
+    }
+  }
+  codeRecords.push(...statsHistory.records);
+  if (statsHistory.records.length) {
+    sessions.code['claude-stats'] = { title: `Claude Code 历史日统计（截至 ${statsHistory.latestDay}；四类拆分为估算）` };
+  }
+
+  const coverageNote = '逐请求日志与 usage-ledger 按来源、会话、本地日和模型选用总量较完整的一组；消息数与台账轮次不代表精确请求数。';
+  const codeNote = [coverageNote, statsHistory.records.length
+    ? `stats-cache 截至 ${statsHistory.latestDay}；仅补已知 Code/Cowork 实际记录扣除后的历史日差额，四类按 modelUsage 全期比例估算。`
+    : ''].filter(Boolean).join(' ');
+  const desktopNote = coverageNote;
+
+  if (stats && typeof stats === 'object') {
+    for (const key of ['code', 'desktop']) {
+      const target = stats[key] && typeof stats[key] === 'object' ? stats[key] : stats;
+      addClaudeStats(target, outStats[key]);
+    }
+  }
+  const cleanRecords = (records) => records.map(({ requestId, ...rec }) => rec).sort((a, b) => a.t - b.t);
+  return {
+    code: { records: cleanRecords(codeRecords), sessions: sessions.code, note: codeNote, stats: claudeStatsView(codeStats) },
+    desktop: { records: cleanRecords(desktopRecords), sessions: sessions.desktop, note: desktopNote, stats: claudeStatsView(desktopStats) },
+  };
+}
+
 /** Codex 会话标题索引 */
-async function codexTitles() {
+async function codexTitles(home = path.join(HOME, '.codex')) {
   const out = {};
-  const p = path.join(HOME, '.codex', 'session_index.jsonl');
-  if (!isFile(p)) return out;
+  const p = path.join(home, 'session_index.jsonl');
   await readLines(p, (line) => {
     const o = tryJson(line);
     if (o && o.id) out[o.id] = { title: o.thread_name || '' };
   });
+  // Desktop 的权威标题可能只保存在状态库；只读打开，兼容不同版本。
+  const dbs = (await fsp.readdir(home).catch(() => []))
+    .filter((n) => /^state_\d+\.sqlite$/.test(n))
+    .sort((a, b) => Number(a.match(/\d+/)[0]) - Number(b.match(/\d+/)[0]));
+  for (const name of dbs) {
+    const db = openSqlite(path.join(home, name));
+    if (!db) continue;
+    try {
+      const columns = new Set(db.prepare('PRAGMA table_info(threads)').all().map((r) => r.name));
+      const fields = ['id', 'title', 'cwd', 'model', 'first_user_message'].filter((k) => columns.has(k));
+      if (!columns.has('id')) continue;
+      for (const row of db.prepare(`SELECT ${fields.join(', ')} FROM threads`).all()) {
+        const prev = out[row.id] || {};
+        out[row.id] = {
+          ...prev, cwd: row.cwd || prev.cwd || '', model: row.model || prev.model || '',
+          title: row.title && row.title.trim() ? row.title.trim() : prev.title ||
+            (row.first_user_message && !isHostContext(row.first_user_message) ? row.first_user_message.replace(/\s+/g, ' ').slice(0, 100) : ''),
+        };
+      }
+    } catch { /* 旧版没有这些列或表 */ }
+    finally { db.close(); }
+  }
   return out;
 }
 
@@ -559,68 +929,90 @@ function decodeZstdFrames(buf) {
   const parts = [];
   for (let k = 0; k < offs.length; k++) {
     const seg = buf.subarray(offs[k], k + 1 < offs.length ? offs[k + 1] : buf.length);
-    try { parts.push(zlib.zstdDecompressSync(seg).toString('utf8')); } catch { /* 跳过坏帧 */ }
+    try { parts.push(zlib.zstdDecompressSync(seg)); } catch { /* 跳过尚未写完的尾帧 */ }
   }
-  return parts.join('\n');
+  // 帧边界可能落在一行或 UTF-8 字符中间，必须先拼字节再解码。
+  return Buffer.concat(parts).toString('utf8');
 }
 
-async function dshHarnessSessions(stats) {
+function parseDshSession(text, fallbackSid) {
+  const events = text.split('\n').map(tryJson).filter(Boolean);
+  const header = events.find(o => o.type === 'session') || {};
+  const sid = header.id || fallbackSid;
+  const records = [];
+  const meta = { title: '', ...(header.cwd ? { cwd: header.cwd } : {}) };
+  if (num(header.version) > 4) return { sid, records, meta, unsupported: true };
+  // 子会话复制的历史不产生新请求；上游以最后一个 end-seed 标出继承边界。
+  const seedEnd = events.findLastIndex(o => o.type === 'session/end-seed');
+  const start = seedEnd >= 0 ? seedEnd + 1 : header.isSeeded ? events.length : 0;
+  for (const [index, o] of events.entries()) {
+    const data = o.data || {};
+    if (o.type === 'session/title' && data.title) meta.title = data.title;
+    if (index < start || !data.usage || !['assistant/message', 'compaction/summary'].includes(o.type)) continue;
+    const u = data.usage, msg = data.message || {};
+    const rec = norm({
+      t: num(o.time), m: msg.model || msg.source?.model || data.model || 'unknown',
+      i: num(u.inputTokens), o: num(u.outputTokens), cr: num(u.cacheReadTokens),
+      cw: num(u.cacheWriteTokens ?? u.cacheCreationTokens), r: num(u.reasoningTokens), s: sid,
+    });
+    if (rec) records.push({ ...rec, requestId: msg.id || data.compactionId || `${o.type}:${o.seq ?? index}` });
+  }
+  return { sid, records, meta };
+}
+
+async function dshHarnessSessions(stats, sessionRoots) {
   const records = [];
   const sessions = {};
-  const roots = [
+  const roots = sessionRoots || [
     // 桌面版：home 指向自己的应用数据目录，通常还多一层 harness
     ...DSH_DESKTOP_ROOTS.flatMap((b) => [path.join(b, 'harness', 'sessions'), path.join(b, 'sessions')]),
-    path.join(DSH_CLI_HOME, 'sessions'), // CLI 默认 home（DSH_HOME 可覆盖）
+    path.join(DSH_CLI_HOME, 'sessions'), // 官方桌面端与 CLI（DSH_HOME 可覆盖）
   ];
-  for (const root of roots) {
+  const requests = new Map();
+  let unsupported = 0;
+  const seenFiles = new Set();
+  for (const root of new Set(roots)) {
     if (!isDir(root)) continue;
-    const files = await walk(root, (p, n) => /^session\.jsonl(\.zstd|\.gz)?$/.test(n), 0, 4);
-    for (const f of files) {
+    const files = await walk(root, (p, n) => /^session(?:\.v[1-9]\d*)?\.jsonl(?:\.zstd|\.gz)?$/.test(n), 0, 4);
+    // 每个目录只读最高代际的已提交文件，迁移保留的旧日志不能再累计一次。
+    const latest = new Map();
+    for (const file of files.sort()) {
+      const version = Number(path.basename(file).match(/\.v(\d+)\./)?.[1] || 0);
+      const dir = path.dirname(file), prior = latest.get(dir);
+      if (!prior || version > prior.version) latest.set(dir, { file, version });
+    }
+    for (const { file: f } of latest.values()) {
       let text = '';
       try {
+        const real = await fsp.realpath(f);
+        if (seenFiles.has(real)) continue;
+        seenFiles.add(real);
         const buf = await fsp.readFile(f);
         stats.files++;
         stats.bytes += buf.length;
-        text = f.endsWith('.zstd') ? decodeZstdFrames(buf) : buf.toString('utf8');
+        text = f.endsWith('.zstd') ? decodeZstdFrames(buf) : f.endsWith('.gz') ? zlib.gunzipSync(buf).toString('utf8') : buf.toString('utf8');
       } catch { continue; }
-      const sid = path.basename(path.dirname(f));
-      for (const raw of text.split('\n')) {
-        const line = raw.trim();
-        if (!line) continue;
-        const o = tryJson(line);
-        if (!o) continue;
-        const data = o.data || {};
-        if (o.type === 'session/title' && data.title) sessions[sid] = { title: data.title };
-        if (o.type === 'assistant/message' && data.usage) {
-          const u = data.usage;
-          const msg = data.message || {};
-          const rec = norm({
-            t: num(o.time),
-            m: msg.model || (msg.source && msg.source.model) || data.model || 'unknown',
-            i: num(u.inputTokens), o: num(u.outputTokens),
-            cr: num(u.cacheReadTokens), cw: num(u.cacheCreationTokens),
-            r: num(u.reasoningTokens),
-            s: sid,
-          });
-          if (rec) records.push(rec);
-        }
+      const parsed = parseDshSession(text, path.basename(path.dirname(f)));
+      if (parsed.unsupported) { unsupported++; continue; }
+      sessions[parsed.sid] = parsed.meta;
+      for (const rec of parsed.records) {
+        const key = `${parsed.sid}:${rec.requestId}`;
+        const prior = requests.get(key);
+        if (!prior || rec.i + rec.o + rec.cr + rec.cw > prior.i + prior.o + prior.cr + prior.cw) requests.set(key, rec);
       }
     }
   }
-  return { records, sessions };
+  for (const { requestId, ...rec } of requests.values()) records.push(rec);
+  return { records, sessions, ...(unsupported ? { note: `${unsupported} 个会话使用更新的未知格式，未计入用量` } : {}) };
 }
 
 const AGENT_DEFS = [
   {
-    id: 'proma', name: 'Proma', color: '#38bdf8', subtitle: 'Proma 桌面端会话',
-    roots: [path.join(HOME, '.proma', 'agent-sessions')],
+    id: 'mirage', name: 'Mirage', color: '#38bdf8', subtitle: '桌面端会话',
+    roots: [path.join(MIRAGE_HOME, 'agent-sessions'), path.join(MIRAGE_HOME, 'conversations')],
     async scan(ctx) {
       const files = [];
-      for (const d of [
-        path.join(HOME, '.proma', 'agent-sessions'),
-        path.join(HOME, '.proma', 'conversations'),
-        path.join(HOME, '.proma-dev', 'agent-sessions'),
-      ]) {
+      for (const d of this.roots) {
         files.push(...(await walk(d, (p, n) => n.endsWith('.jsonl'), 0, 2)));
       }
       const records = await scanWithCache(files, (o, st) => {
@@ -633,15 +1025,20 @@ const AGENT_DEFS = [
           if (st.seen.has(id)) return null;
           st.seen.add(id);
         }
-        return norm({
+        const rec = norm({
           t: toMs(o._createdAt) || toMs(o.timestamp),
           m: o._channelModelId || (o.message && o.message.model) || 'unknown',
           i: num(u.input_tokens), o: num(u.output_tokens),
           cr: num(u.cache_read_input_tokens), cw: num(u.cache_creation_input_tokens), r: 0,
           s: o.session_id || path.basename(st.file, '.jsonl'),
         });
+        return rec ? { ...rec, requestId: id || '' } : null;
       }, null, ctx.stats, hasAny('"usage"'));
-      return { records, sessions: await promaSessionMeta() };
+      const sessions = await sessionMetaFromFiles(files, { userTextOf: firstUserInputText });
+      for (const [sid, meta] of Object.entries(await mirageSessionMeta())) {
+        sessions[sid] = { ...sessions[sid], ...meta, title: meta.title || sessions[sid]?.title || '' };
+      }
+      return { records: dedupeMirageRecords(records), sessions };
     },
   },
   {
@@ -650,7 +1047,7 @@ const AGENT_DEFS = [
     async scan(ctx) {
       const files = await walk(path.join(HOME, '.pi', 'agent', 'sessions'), (p, n) => n.endsWith('.jsonl'));
       return {
-        records: await scanWithCache(files, piLineHandler, null, ctx.stats, hasAny(['"usage"', '"type":"session"'])),
+        records: await scanWithCache(files, piLineHandler, null, ctx.stats, hasAny(['"usage"', '"session"'])),
         sessions: await sessionMetaFromFiles(files, { sidOf: piSidOf, userTextOf: piUserInputText }),
       };
     },
@@ -661,80 +1058,27 @@ const AGENT_DEFS = [
     async scan(ctx) {
       const files = await walk(path.join(HOME, '.omp', 'agent', 'sessions'), (p, n) => n.endsWith('.jsonl'));
       return {
-        records: await scanWithCache(files, piLineHandler, null, ctx.stats, hasAny(['"usage"', '"type":"session"'])),
+        records: await scanWithCache(files, piLineHandler, null, ctx.stats, hasAny(['"usage"', '"session"'])),
         sessions: await sessionMetaFromFiles(files, { sidOf: piSidOf, userTextOf: piUserInputText }),
       };
     },
   },
   {
-    id: 'claude-code', name: 'Claude Code', color: '#fb923c', subtitle: 'Claude Code CLI',
-    roots: [path.join(HOME, '.claude', 'projects')],
+    id: 'claude-code', name: 'Claude Code', color: '#fb923c', subtitle: 'Claude Code CLI / Claude Desktop Code 标签页',
+    roots: [CLAUDE_PROJECTS_ROOT, ...CLAUDE_DESKTOP_ROOTS.flatMap((b) => [path.join(b, 'claude-code-sessions'), path.join(b, 'local-agent-mode-sessions')])],
     async scan(ctx) {
-      const all = await walk(path.join(HOME, '.claude', 'projects'), (p, n) => n.endsWith('.jsonl'), 0, 6);
-      const claimed = (ctx.claims && ctx.claims.cliIds) || new Set();
-      const files = all.filter((f) => !claimed.has(path.basename(f, '.jsonl')));
-      const fileRecs = await scanWithCache(files, ccLineHandler, null, ctx.stats, hasAny('"usage"'));
-      // 合并 Claude Code 自带的按天统计（已清理的老会话只能从这里找回）
-      const stats = await claudeStatsRecords();
-      const extra = fileRecs.filter((r) => !stats.days.has(dayKeyLocal(r.t)));
-      const records = [...stats.records, ...extra];
-      const sessions = await sessionMetaFromFiles(all, { userTextOf: firstUserInputText });
-      // 来自主动按天统计的记录没有会话文件，给个可读的桶名，不暴露内部 id
-      if (stats.records.length) sessions['claude-stats'] = { title: 'Claude Code 官方按天统计（早期会话文件已清理）' };
-      return {
-        records,
-        sessions,
-        note: stats.records.length
-          ? `含 ${stats.days.size} 天的官方按天统计（早期会话文件已被自动清理；四类拆分为模型比例估算）`
-          : '',
-      };
+      const result = await ctx.getClaudeUsage();
+      addClaudeStats(ctx.stats, result.code.stats);
+      return result.code;
     },
   },
   {
-    id: 'claude-desktop', name: 'Claude Desktop', color: '#fbbf24', subtitle: 'Claude Desktop / Cowork 账本',
+    id: 'claude-desktop', name: 'Claude Desktop', color: '#fbbf24', subtitle: 'Claude Desktop Cowork',
     roots: CLAUDE_DESKTOP_ROOTS,
     async scan(ctx) {
-      const sesRoots = CLAUDE_DESKTOP_ROOTS.filter(isDir)
-        .flatMap((b) => [path.join(b, 'local-agent-mode-sessions'), path.join(b, 'claude-code-sessions')]);
-      const ledgers = [];
-      for (const r of sesRoots) ledgers.push(...(await walk(r, (p, n) => n.endsWith('.ndjson'), 0, 6)));
-
-      const records = [];
-      const ledgerLocalIds = new Set();
-      ctx.stats.files += ledgers.length;
-      for (const f of ledgers) {
-        try { ctx.stats.bytes += (await fsp.stat(f)).size; } catch { /* 忽略 */ }
-        await readLines(f, (line) => {
-          const o = tryJson(line);
-          if (!o || !o.models) return;
-          if (o.sessionId) ledgerLocalIds.add(o.sessionId);
-          const ts = toMs(o.ts);
-          for (const [model, mu] of Object.entries(o.models)) {
-            if (!mu || typeof mu !== 'object') continue;
-            const rec = norm({
-              t: ts, m: model,
-              i: num(mu.inputTokens), o: num(mu.outputTokens),
-              cr: num(mu.cacheReadTokens), cw: num(mu.cacheWriteTokens), r: 0,
-              c: mu.cost && num(mu.cost.usd) ? num(mu.cost.usd) : undefined,
-              s: o.sessionId || 'claude-desktop',
-            });
-            if (rec) records.push(rec);
-          }
-        }, hasAny('"models"'));
-      }
-
-      // 沙箱内 Claude Code 会话（账本已覆盖的跳过，避免重复）
-      const map = (ctx.claims && ctx.claims.map) || {};
-      const coveredCli = new Set([...ledgerLocalIds].map((id) => map[id]).filter(Boolean));
-      const sandbox = [];
-      for (const r of sesRoots) {
-        const found = await walk(r, (p, n) => n.endsWith('.jsonl') && p.includes(`${path.sep}.claude${path.sep}`), 0, 8);
-        for (const f of found) if (!coveredCli.has(path.basename(f, '.jsonl'))) sandbox.push(f);
-      }
-      const extra = await scanWithCache(sandbox, ccLineHandler, null, ctx.stats, hasAny('"usage"'));
-      records.push(...extra);
-
-      return { records, sessions: (ctx.claims && ctx.claims.meta) || {} };
+      const result = await ctx.getClaudeUsage();
+      addClaudeStats(ctx.stats, result.desktop.stats);
+      return result.desktop;
     },
   },
   {
@@ -751,26 +1095,28 @@ const AGENT_DEFS = [
         const snaps = await scanOneFileCached(file, codexSnapshotHandler, null, ctx.stats,
           hasAny(['"token_count"', '"session_meta"', '"turn_context"', '"token_usage_record"']));
         if (!snaps || !snaps.length) continue;
-        const last = snaps[snaps.length - 1];
-        const cur = perSession.get(last.s);
-        if (!cur || last.ct > cur.total) perSession.set(last.s, { total: last.ct, snaps });
+        selectCodexSessions(perSession, snaps);
       }
       // 累计值转逐轮增量，保证合计与末次累计一致，同时保留时间分布
       const records = [];
       for (const [sid, s] of perSession) {
-        let pi = 0, po = 0, pcr = 0, pcw = 0, pr = 0;
-        for (const snap of s.snaps) {
-          const rec = norm({
-            t: snap.t, m: snap.m, s: sid,
-            i: Math.max(0, snap.i - pi), o: Math.max(0, snap.o - po),
-            cr: Math.max(0, snap.cr - pcr), cw: Math.max(0, snap.cw - pcw), r: Math.max(0, snap.r - pr),
-          });
-          pi = Math.max(pi, snap.i); po = Math.max(po, snap.o);
-          pcr = Math.max(pcr, snap.cr); pcw = Math.max(pcw, snap.cw); pr = Math.max(pr, snap.r);
-          if (rec) records.push(rec);
-        }
+        records.push(...codexDeltas(s.snaps, sid));
       }
-      return { records, sessions: await codexTitles() };
+      const sessions = await codexTitles();
+      const missingFiles = files.filter((f) => {
+        const snaps = scanCacheNext[f]?.records || [];
+        return snaps.some((snap) => !sessions[snap.s]?.title);
+      });
+      const fallback = await sessionMetaFromFiles(missingFiles, {
+        sidOf: (f, o) => o?.payload?.id || o?.payload?.session_id || codexIdFromPath(f),
+        userTextOf: codexUserInputText,
+        fallbackTitleOf: codexAgentTitle,
+      });
+      for (const [sid, meta] of Object.entries(fallback)) {
+        const current = sessions[sid] || {};
+        sessions[sid] = { ...meta, ...current, title: current.title || meta.title, cwd: current.cwd || meta.cwd };
+      }
+      return { records, sessions };
     },
   },
   {
@@ -795,11 +1141,11 @@ const AGENT_DEFS = [
     },
   },
   {
-    id: 'dsh', name: 'DeepSeek Harness', color: '#60a5fa', subtitle: 'DSH 事件流（含桌面版）',
+    id: 'dsh', name: 'DeepSeek Harness', color: '#60a5fa', subtitle: '官方桌面端 / CLI / 旧桌面版',
     roots: [...DSH_DESKTOP_ROOTS, DSH_CLI_HOME],
     async scan(ctx) {
       const found = await dshHarnessSessions(ctx.stats);
-      if (found.records.length) return { records: found.records, sessions: found.sessions };
+      if (found.records.length || found.note) return found;
       // 兼容：早期 CLI 的 storages JSON
       const files = await walk(path.join(DSH_CLI_HOME, 'storages'), (p, n) => /\.(jsonl|ndjson|json)$/.test(n) && n !== 'workspace.json', 0, 6);
       const records = await scanWithCache(files, dshLineHandler, null, ctx.stats);
@@ -885,21 +1231,94 @@ const AGENT_DEFS = [
 
 /** Codex：输出累计用量快照（ct = 累计总量） */
 function codexSnapshotHandler(o, st) {
-  if (o.type === 'session_meta') { st.sid = (o.payload && o.payload.session_id) || st.sid; return null; }
+  if (o.type === 'session_meta') {
+    const meta = o.payload || {};
+    st.sid = meta.id || meta.session_id || st.sid;
+    st.historyStart = num(meta.subagent_history_start_ordinal);
+    return null;
+  }
   if (o.type === 'turn_context') { st.model = (o.payload && o.payload.model) || st.model; return null; }
   const payload = o.payload || {};
   let cum = null;
   if (payload.type === 'token_count') cum = (payload.info && payload.info.total_token_usage) || null;
-  else if (o.type === 'token_usage_record') cum = payload.total_token_usage || (payload.info && payload.info.total_token_usage) || null;
+  else if (o.type === 'token_usage_record') cum = payload.thread_token_usage || payload.total_token_usage || (payload.info && payload.info.total_token_usage) || null;
   if (!cum) return null;
-  const input = num(cum.input_tokens), cached = num(cum.cached_input_tokens), output = num(cum.output_tokens);
-  const ct = num(cum.total_tokens) || (input + output);
+  // 子 Agent 文件可能包含父线程历史。边界前的用量只作为旧式计数器基线。
+  if (st.historyStart && Number.isFinite(o.ordinal) && o.ordinal < st.historyStart) {
+    if (o.type !== 'token_usage_record') st.historyUsage = cum;
+    return null;
+  }
+  let base = o.type === 'token_usage_record' ? null : st.historyUsage;
+  if (base && num(cum.input_tokens) < num(base.input_tokens)) { st.historyUsage = null; base = null; }
+  const input = Math.max(0, num(cum.input_tokens) - num(base?.input_tokens));
+  const cached = Math.min(input, Math.max(0, num(cum.cached_input_tokens) - num(base?.cached_input_tokens)));
+  const output = Math.max(0, num(cum.output_tokens) - num(base?.output_tokens));
+  const ct = input + output;
   if (!ct) return null;
   return {
-    t: toMs(o.timestamp), m: st.model || 'unknown', s: st.sid || 'codex', ct,
+    t: toMs(o.timestamp), m: st.model || 'unknown', s: payload.thread_id || st.sid || payload.session_id || codexIdFromPath(st.file), ct,
     // Codex 的 input 包含缓存命中，这里拆成「非缓存输入 + 缓存命中」避免重复计数
-    i: Math.max(0, input - cached), o: output, cr: cached, cw: 0, r: num(cum.reasoning_output_tokens),
+    i: Math.max(0, input - cached), o: output, cr: cached, cw: 0,
+    r: Math.max(0, num(cum.reasoning_output_tokens) - num(base?.reasoning_output_tokens)),
   };
+}
+
+function codexIdFromPath(file = '') {
+  return /([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\.jsonl$/i.exec(file)?.[1] || path.basename(file, '.jsonl');
+}
+
+function codexUserInputText(o) {
+  if (o.type === 'event_msg' && o.payload?.type === 'user_message') {
+    return typeof o.payload.message === 'string' ? o.payload.message : '';
+  }
+  if (o.type !== 'response_item' || o.payload?.role !== 'user') return '';
+  const content = o.payload.content;
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  return content.filter((p) => p && (p.type === 'input_text' || p.type === 'text') && typeof p.text === 'string' && !isHostContext(p.text))
+    .map((p) => p.text).join('\n');
+}
+
+function codexAgentTitle(o) {
+  if (o?.type !== 'session_meta') return '';
+  const meta = o.payload || {};
+  const spawn = meta.source?.subagent?.thread_spawn || {};
+  const nickname = meta.agent_nickname || spawn.agent_nickname;
+  const task = (meta.agent_path || spawn.agent_path || '').split('/').filter(Boolean).pop();
+  return [task, nickname].filter(Boolean).join(' · ');
+}
+
+function codexDeltas(snaps, sid) {
+  const records = [];
+  let prev = { ct: 0, input: 0, o: 0, cr: 0, r: 0 };
+  for (const snap of snaps) {
+    // 新旧事件可能同时上报同一累计值；历史回声也不能再产生增量。
+    if (snap.ct <= prev.ct) continue;
+    const input = snap.i + snap.cr;
+    const di = Math.max(0, input - prev.input);
+    const cr = Math.min(di, Math.max(0, snap.cr - prev.cr));
+    const rec = norm({ t: snap.t, m: snap.m, s: sid,
+      i: di - cr, o: Math.max(0, snap.o - prev.o), cr, cw: 0, r: Math.max(0, snap.r - prev.r),
+    });
+    prev = { ct: snap.ct, input, o: snap.o, cr: snap.cr, r: snap.r };
+    if (rec) records.push(rec);
+  }
+  return records;
+}
+
+function selectCodexSessions(perSession, snaps) {
+  const groups = new Map();
+  for (const snap of snaps) {
+    if (!groups.has(snap.s)) groups.set(snap.s, []);
+    groups.get(snap.s).push(snap);
+  }
+  for (const [sid, group] of groups) {
+    const total = group.reduce((max, snap) => Math.max(max, snap.ct), 0);
+    const current = perSession.get(sid);
+    if (!current || total > current.total || (total === current.total && group.length > current.snaps.length)) {
+      perSession.set(sid, { total, snaps: group });
+    }
+  }
 }
 
 /** DeepSeek Harness：宽松解析（当前无数据，供后续使用） */
@@ -1097,10 +1516,8 @@ async function runScan() {
   scanState = { phase: 'scanning', startedAt: started, done: 0, total: AGENT_DEFS.length, current: '', message: '准备扫描…', agents: {} };
   for (const k of Object.keys(scanCacheNext)) delete scanCacheNext[k];
 
-  let claims = { cliIds: new Set(), map: {}, meta: {} };
-  try { claims = await collectClaims(); } catch { /* 忽略 */ }
-
   const agents = {};
+  let claudeUsagePromise = null;
   for (let idx = 0; idx < AGENT_DEFS.length; idx++) {
     const def = AGENT_DEFS[idx];
     scanState.current = def.id;
@@ -1111,7 +1528,14 @@ async function runScan() {
     let error = null;
     let note = '';
     try {
-      const r = await def.scan({ claims, stats });
+      const ctx = {
+        stats,
+        getClaudeUsage() {
+          if (!claudeUsagePromise) claudeUsagePromise = scanClaudeUsage();
+          return claudeUsagePromise;
+        },
+      };
+      const r = await def.scan(ctx);
       records = r.records || [];
       sessions = r.sessions || {};
       note = r.note || '';
@@ -1153,7 +1577,9 @@ function ensureScan(force) {
 /* HTTP 服务                                                            */
 /* ------------------------------------------------------------------ */
 
-const JSON_HEADERS = { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' };
+const JSON_HEADERS = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store',
+  ...(!AUTH_TOKEN ? { 'Access-Control-Allow-Origin': '*' } : {}),
+};
 
 function sendJson(res, code, obj) {
   const body = JSON.stringify(obj);
@@ -1173,6 +1599,11 @@ function readBody(req) {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://127.0.0.1:${PORT}`);
   const p = url.pathname;
+
+  if (AUTH_TOKEN && p.startsWith('/api/') && req.headers['x-token-viewer-auth'] !== AUTH_TOKEN) {
+    sendJson(res, 401, { error: 'unauthorized' });
+    return;
+  }
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' });
@@ -1236,10 +1667,11 @@ async function runDoctor() {
   const data = await runScan();
   const exists = (p) => { try { fs.statSync(p); return true; } catch { return false; } };
   const CANDIDATES = {
-    proma: [path.join(HOME, '.proma', 'agent-sessions'), path.join(HOME, '.proma', 'conversations'), path.join(HOME, '.proma-dev', 'agent-sessions')],
+    mirage: [path.join(MIRAGE_HOME, 'agent-sessions'), path.join(MIRAGE_HOME, 'conversations')],
     pi: [path.join(HOME, '.pi', 'agent', 'sessions')],
     omp: [path.join(HOME, '.omp', 'agent', 'sessions')],
-    'claude-code': [path.join(HOME, '.claude', 'projects'), path.join(HOME, '.claude', 'stats-cache.json')],
+    'claude-code': [CLAUDE_CONFIG_HOME, CLAUDE_PROJECTS_ROOT, CLAUDE_STATS_FILE,
+      ...CLAUDE_DESKTOP_ROOTS.flatMap((b) => [path.join(b, 'claude-code-sessions'), path.join(b, 'local-agent-mode-sessions')])],
     'claude-desktop': CLAUDE_DESKTOP_ROOTS.flatMap((b) => [path.join(b, 'local-agent-mode-sessions'), path.join(b, 'claude-code-sessions')]),
     codex: [path.join(HOME, '.codex', 'sessions'), path.join(HOME, '.codex', 'archived_sessions'), path.join(HOME, '.codex', 'session_index.jsonl')],
     zcode: [path.join(HOME, '.zcode', 'cli', 'db', 'db.sqlite'), path.join(HOME, '.zcode', 'cli', 'agents'), path.join(HOME, '.zcode', 'cli', 'rollout')],
@@ -1266,6 +1698,7 @@ async function runDoctor() {
 
 async function main() {
   const once = process.argv.includes('--once');
+  await fsp.mkdir(DATA_ROOT, { recursive: true });
   loadCache();
   await ensurePricingFile();
 
@@ -1298,10 +1731,12 @@ async function main() {
 
   ensureScan(false);
   server.listen(PORT, '127.0.0.1', () => {
+    const port = server.address().port;
+    if (process.send) process.send({ type: 'ready', port });
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('  Token Viewer · 通用 Agent Token 用量查看器');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log(`  地址: http://127.0.0.1:${PORT}`);
+    console.log(`  地址: http://127.0.0.1:${port}`);
     console.log(`  数据目录: ${HOME}`);
     console.log('  正在后台扫描各 Agent 数据源…');
     console.log('  按 Ctrl+C 停止');
@@ -1309,6 +1744,9 @@ async function main() {
   });
 }
 
-main().catch((e) => { console.error('启动失败:', e); process.exit(1); });
+// Electron 父进程关闭或崩溃后，专属扫描服务随之退出。
+if (process.send) process.once('disconnect', () => { server.close(); process.exit(0); });
 
-module.exports = { runScan, AGENT_DEFS };
+if (require.main === module) main().catch((e) => { console.error('启动失败:', e); process.exit(1); });
+
+module.exports = { runScan, AGENT_DEFS, scanClaudeUsage, codexSnapshotHandler, codexDeltas, selectCodexSessions, codexUserInputText, codexAgentTitle, dedupeMirageRecords, sessionMetaFromFiles, codexTitles, piSidOf, piUserInputText, resolveDshHome, decodeZstdFrames, parseDshSession, dshHarnessSessions };

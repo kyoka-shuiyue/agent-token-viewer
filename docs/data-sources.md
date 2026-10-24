@@ -11,29 +11,29 @@
 
 | # | Agent | 主数据位置 | 格式 | 用量字段 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | Proma | `~/.proma/agent-sessions/*.jsonl`<br>`~/.proma/conversations/*.jsonl`<br>`~/.proma-dev/agent-sessions/*.jsonl` | JSONL | `type:"assistant"` → `message.usage` | 已接入 |
+| 1 | Mirage | `~/.mirage/agent-sessions/*.jsonl`<br>`~/.mirage/conversations/*.jsonl` | JSONL | `type:"assistant"` → `message.usage` | 已接入 |
 | 2 | Pi | `~/.pi/agent/sessions/**/*.jsonl` | JSONL | `type:"message"` + `message.role:"assistant"` → `message.usage` | 已接入 |
 | 3 | oh-my-Pi | `~/.omp/agent/sessions/**/*.jsonl` | JSONL | 同 Pi | 已接入 |
-| 4 | Claude Code | `~/.claude/projects/**/*.jsonl`<br>**+ `~/.claude/stats-cache.json`** | JSONL + JSON | `message.usage` / `dailyModelTokens` | 已接入 |
-| 5 | Claude Desktop | `%LOCALAPPDATA%/Claude-3p/local-agent-mode-sessions/**/usage-ledger/*.ndjson` | NDJSON | `models[模型].*Tokens` + `cost.usd` | 已接入 |
-| 6 | Codex | `~/.codex/sessions/**/rollout-*.jsonl`<br>`~/.codex/archived_sessions/*.jsonl` | JSONL | `event_msg`→`payload.info.total_token_usage` | 已接入 |
+| 4 | Claude Code（CLI / 桌面 Code） | `~/.claude/projects/**/*.jsonl`（支持 `CLAUDE_CONFIG_DIR`）<br>Code `usage-ledger` + 历史 `stats-cache.json` | JSONL / NDJSON / JSON | `message.usage` / `models` / 历史日余额 | 已接入 |
+| 5 | Claude Desktop（Cowork） | `%APPDATA%/Claude/local-agent-mode-sessions/**`<br>兼容 `%LOCALAPPDATA%/Claude-3p/...` | NDJSON / 标准沙箱 JSONL | `surface:cowork` → `models` / `message.usage` | 已接入 |
+| 6 | Codex | `~/.codex/sessions/**/rollout-*.jsonl`<br>`~/.codex/archived_sessions/*.jsonl` | JSONL | `event_msg`→`payload.info.total_token_usage` / `token_usage_record`→`payload.thread_token_usage` | 已接入 |
 | 7 | ZCode | `~/.zcode/cli/db/db.sqlite` 表 `model_usage` | SQLite | 独立列 | 已接入（transcript 作回退） |
-| 8 | DeepSeek Harness | `%APPDATA%/dsh-desktop/harness/sessions/**/session.jsonl.zstd`<br>`~/.dsh/sessions/**` | 多帧 zstd + JSONL | `assistant/message` → `data.usage` | 已接入 |
+| 8 | DeepSeek Harness | 官方桌面端/CLI：`~/.dsh/sessions/**/session.v4.jsonl.zstd`（支持 `DSH_HOME`）<br>兼容旧桌面版 `%APPDATA%/dsh-desktop/harness/sessions/**` | 多帧 zstd / gzip / JSONL，v0–v4 | `assistant/message`、`compaction/summary` → `data.usage` | 已接入 |
 | 9 | OpenCode | `~/.local/share/opencode/opencode.db`（+`opencode-local.db`）表 `message`/`session` | SQLite | `data.tokens` | 已接入 |
 | 10 | Qoder | `~/.qoder/projects/**/*.jsonl`（子代理在其 `subagents/` 下） | JSONL | **无 token 字段** → 按消息文本估算 | 已接入（估算口径） |
 
 ---
 
-## 1. Proma
+## 1. Mirage
 
-- **位置**：`~/.proma/agent-sessions/*.jsonl`（每个会话一个文件）。开发版实例在 `~/.proma-dev/agent-sessions/`，**容易漏**。
+- **位置**：`~/.mirage/agent-sessions/*.jsonl`（每个会话一个文件）。仅扫描 `.mirage`，不读取 Proma 或 Proma Dev。
 - **格式**：Claude Code 风格事件流。
 - **用量**：`type:"assistant"` 行的 `message.usage`：
   `input_tokens` / `output_tokens` / `cache_read_input_tokens` / `cache_creation_input_tokens`
 - **时间**：`_createdAt`（毫秒）优先，回退 `timestamp`。
 - **模型**：`_channelModelId` 优先（渠道真实模型），回退 `message.model`。
-- **会话**：`session_id`；标题在 `~/.proma/agent-sessions.json` 的 `sessions` 里。
-  **但索引条目有两套 id**：`id`（Proma 内部 id，也等于会话文件名）与 `sdkSessionId`（SDK 会话 id）。
+- **会话**：`session_id`；标题在 `~/.mirage/agent-sessions.json` 的 `sessions` 里。
+  **但索引条目有两套 id**：`id`（Mirage 内部 id，也等于会话文件名）与 `sdkSessionId`（SDK 会话 id）。
   会话文件里的 `session_id` 是 **`sdkSessionId`**，按 `id` 建索引会一条也匹不上（实测 0/245）。
 - **坑**：
   - 同一轮会同时写 `type:"assistant"` 和 `type:"result"`，两者数值相同 → **只能取一种**，本项目取 `assistant` 并按 `uuid` 去重。
@@ -55,39 +55,31 @@
   - 会话 id 在首行 `type:"session"` 的 `id`，**但行级预过滤会跳过它**，所以要用文件名兜底。
   - **标题**：Pi 家族没有标题索引，取首条 `type:"message"` + `role:"user"` 的 `text` 作为标题（见下文「会话标题从哪来」）。
 
-## 4. Claude Code（最容易漏的一个）
+## 4. Claude Code（CLI 与桌面 Code 标签页）
 
-- **位置 A**：`~/.claude/projects/<编码后的cwd>/<session>.jsonl`
-- **位置 B（关键）**：`~/.claude/stats-cache.json` —— Claude Code 自己的统计缓存。
-- **为什么必须用 B**：Claude Code 会**自动清理旧会话文件**。实测某台机器 `projects/` 只剩 5 个文件（约 340 万 tokens），
-  而 `stats-cache.json` 里记着 `totalSessions: 52 / totalMessages: 7937`，`dailyModelTokens` 单月就有 5.98 亿。
-  只扫文件会**少两个数量级**。
-- **字段**：
-  - 文件：`message.usage.{input_tokens, output_tokens, cache_read_input_tokens, cache_creation_input_tokens}`，按 `message.id` 去重。
-  - 缓存：`dailyModelTokens: [{date, tokensByModel: {模型: 总量}}]`（只有日粒度总量）；
-    `modelUsage: {模型: {inputTokens, outputTokens, cacheReadInputTokens, cacheCreationInputTokens, costUSD}}`（全期四类总量）。
-  - 本项目做法：以 `dailyModelTokens` 为主源，四类拆分按 `modelUsage` 的**全局比例估算**；
-    文件记录只补 `stats-cache` 未覆盖的日期，避免重复计数。UI 会标注这一事实。
-  - `stats-cache.json` 有 `lastComputedDate`，**它之后的数据要靠会话文件**；文件若已删则该段无法回补。
-- **坑**：`~/.claude/stats-cache.json` 的 `dailyActivity` 只有消息数没有 token，别用错表。
-- **标题**：本机版本的 Claude Code **不写 `type:"summary"` 行**，所以取首条真实用户输入当标题（排除 `tool_result` 回传）。
-  来自 `stats-cache.json` 的记录没有会话文件，统一归到一个名为
-  `Claude Code 官方按天统计（早期会话文件已清理）` 的桶，不暴露内部 id。
+- **归类**：CLI 与 Claude Desktop 的 Code 标签页使用同一 Code 引擎，统一计入 `claude-code`；Cowork 单独计入 `claude-desktop`。不按“哪个可执行程序打开了窗口”混合归类。
+- **当前会话位置**：`~/.claude/projects/<项目>/<session>.jsonl`，包括标准 `subagents` 子会话。支持官方 `CLAUDE_CONFIG_DIR` 更改配置 home；不会读取凭据、settings 或插件来估算 Token。
+- **桌面声明**：新版 `%APPDATA%/Claude/claude-code-sessions`，兼容旧 `%LOCALAPPDATA%/Claude-3p/claude-code-sessions` 等已有应用数据候选。`local_*.json` 的 `cliSessionId` 可能指向主 `~/.claude/projects`，声明不能让这些请求直接从扫描中消失。
+- **逐请求字段**：`message.usage.{input_tokens, output_tokens, cache_read_input_tokens, cache_creation_input_tokens}`。同一 `message.id` 在流式内容块、续接文件与副本中重复时，保留总量最大的完整用量，而非第一条。副本不重复累计。
+- **台账兜底**：`usage-ledger/*.ndjson` 中 `surface:"code"` 的用量计入 Code。按会话、当地日期、模型比较逐请求与台账覆盖量，选覆盖更完整的一组；两份重叠账目不相加。
+- **旧历史**：`stats-cache.json` 的 `dailyModelTokens[].tokensByModel` 是日总量；`dailyActivity` 不是 Token。按日与模型扣掉已识别用量，仅补正的历史余额，不再因为某日已有缓存就丢掉当天其他模型或新请求。四类拆分按 `modelUsage` 的全期比例估算，整数分配保证四项合计等于剩余总量。界面明确历史缓存截止日期，历史桶使用 `claude-stats` 标识，不参与精确到小时的同期比较。
+- **标题**：优先桌面声明的新标题，回退真实用户输入；不展示宿主上下文。归属使用真实会话 id，源码与原始日志只读。
 
-## 5. Claude Desktop
+## 5. Claude Desktop（Cowork）
 
-- **位置**：`%LOCALAPPDATA%/Claude-3p/local-agent-mode-sessions/<账户>/<工作区>/usage-ledger/<日期>.ndjson`
-  （`Claude-3p` 是新版带 Agent/Cowork 模式的桌面版；老版在 `%APPDATA%/Claude/`，通常只有壳数据）。
-- **格式**：每行一轮，`models` 是按模型分组的字典：
+- **归类**：`claude-desktop` 展示本机可读取的 Cowork 台账/日志；普通 Chat 没有真实本地 usage 时不估算，也不声称已覆盖所有聊天用量。
+- **位置**：新版 `%APPDATA%/Claude/local-agent-mode-sessions`，兼容旧 `%LOCALAPPDATA%/Claude-3p/local-agent-mode-sessions` 及跨平台应用目录；仅读取会话声明、`usage-ledger` 和标准沙箱 `.claude/projects` 日志，不把工作区里的任意 JSONL/NDJSON 当成用量。
+- **按工作类型分流**：台账 `surface:"cowork"` 属于本来源，`surface:"code"` 属于 Claude Code。缺失 `surface` 时使用会话声明和拥有该日志的标准目录判断。
+- **格式**：
   ```json
-  {"v":1,"ts":1788608974402,"surface":"cowork","sessionId":"local_...",
-   "models":{"claude-haiku-4-5[1m]":{"inputTokens":33982,"outputTokens":94,
-     "cacheReadTokens":0,"cacheWriteTokens":0,"cost":{"usd":0.0344,"basis":"list"}}}}
+  {"v":1,"ts":1788608974402,"surface":"cowork","sessionId":"local_fixture",
+   "models":{"fixture-model":{"inputTokens":33982,"outputTokens":94,
+     "cacheReadTokens":0,"cacheWriteTokens":0,"cost":{"usd":0.0344}}}}
   ```
-- **优点**：自带美元成本（`cost.usd`），可直接用。
-- **坑（重复计数）**：同一目录树下还有沙箱版 `.claude/projects/**/*.jsonl`，与账本指向同一会话；
-  而且 `claude-code-sessions/**/local_*.json` 里的 `cliSessionId` 可能指向**主 `~/.claude/projects` 的文件**。
-  → 本项目先收集这些 `cliSessionId`，从 Claude Code 扫描中排除，账本已覆盖的会话也不再读沙箱文件。
+- **去重/覆盖**：`local-agent-mode-sessions` 声明的 Cowork 会话若使用共享 projects 日志，该请求也只计入 Cowork。声明别名映射到真实 CLI id；逐请求与台账按会话/自然日/模型选择覆盖较完整的一组，缺少逐请求时保留台账。完全相同的台账行或请求跨目录副本只计一次。`cost.usd` 为可用的记录成本。
+- **记录次数**：台账行可能是一轮、历史缓存是一日，界面使用“用量记录”，不把所有归一化记录数都叫 API 调用次数。
+
+官方依据（2026-10-17核验）：[桌面 Code 与 CLI](https://code.claude.com/docs/en/desktop#coming-from-the-cli)、[会话管理](https://code.claude.com/docs/en/sessions)、[配置目录覆盖](https://code.claude.com/docs/en/settings#find-or-create-your-settings-files)。文件格式与路径层级另以本机只读结构核验。
 
 ## 6. Codex
 
@@ -95,15 +87,16 @@
 - **格式**：事件流。用量在 `type:"event_msg"` 且 `payload.type:"token_count"`：
   `payload.info.total_token_usage`（会话累计）与 `payload.info.last_token_usage`（本轮）。
   字段：`input_tokens` / `cached_input_tokens` / `cache_write_input_tokens` / `output_tokens` / `reasoning_output_tokens` / `total_tokens`
-- **模型**：`turn_context.payload.model`；会话 id：`session_meta.payload.session_id`。
+- **模型**：`turn_context.payload.model`；会话 id：`session_meta.payload.id` 优先，兼容旧 `session_id`。
 - **两个必须处理的坑**：
   1. **续聊重放**：一个会话续聊会新开 rollout 文件并**重放历史事件**，同一 `session_id` 会出现在多个文件里。
      直接累加所有文件的 `last_token_usage` 会**翻倍**（实测 22.8 亿 vs 真实 11.5 亿）。
-     → 正确做法：**按 session 去重**，取累计量最大的那份文件，再把该文件内的 `total_token_usage` **逐条差分**成增量
+     → 正确做法：**同一文件先按实际线程 id 分组，再跨文件去重**，每个线程取累计量最大的那份，再把累计快照 **逐条差分**成增量；相同累计值的新旧事件只计一次
      （差分之和恒等于末次累计，既保总量准确又保留时间分布）。
   2. **口径**：`input_tokens` **包含** `cached_input_tokens`，`output_tokens` 包含 `reasoning_output_tokens`；
      `total = input + output`。→ 本项目存 `i = input - cached`、`cr = cached`，避免重复计数。
-- **标题**：`~/.codex/session_index.jsonl` 每行 `{id, thread_name, updated_at}`，用来给会话列表显示真名。
+- **新版用量**：兼容 `token_usage_record.payload.thread_token_usage` 的线程累计值，不把逐请求 `usage` 再相加。子 Agent 的 `subagent_history_start_ordinal` 之前是复制的父线程历史，不能计为新用量；旧式计数器以该边界前累计值为基线。
+- **标题**：先读取 `session_index.jsonl`，再从只读 `state_*.sqlite` 的 `threads` 表补充或更新标题，最后回退会话文件里的真实用户输入。
 
 ## 7. ZCode
 
@@ -122,18 +115,17 @@
 
 ## 8. DeepSeek Harness
 
-- **CLI 默认 home**：`~/.dsh`（`DSH_HOME` 环境变量可覆盖 —— 见 `@deepseek-ai/dsh-home-paths` 的 `DSH_HOME_ENV`）。
-  **只扫 `~/.dsh` 常常什么都没有**（`storages/workspace.json` 的 `workspaceIds` 为空）。
-- **桌面版真实位置（关键）**：`%APPDATA%/dsh-desktop/harness/sessions/<编码后的cwd>/session-<uuid>/session.jsonl.zstd`
-  —— 桌面版把 home 指到自己的 Electron 数据目录，目录名 `dsh-desktop` 不含 "deepseek" 字样，按关键字搜很容易漏。
-- **格式**：事件溯源 JSONL，20216 条事件里用量只在
-  `type:"assistant/message"` 的 `data.usage`：`{inputTokens, outputTokens, cacheReadTokens, totalTokens}`；
-  模型在 `data.message.model`；标题在 `type:"session/title"` 的 `data.title`。
+- **官方桌面端与 CLI**（2026-10-17 核验）：共用 `~/.dsh`，`DSH_HOME` 支持绝对路径和 `~/`，空白覆盖视为未设置。会话在 `sessions/<项目>/<会话>/session.v4.jsonl.zstd`。`profiles/desktop` 是桌面安装/配置目录，Electron 的 `%APPDATA%/@deepseek-ai/dsh-desktop` 不是会话目录。
+- **旧桌面封装**：继续兼容 `%APPDATA%/dsh-desktop/harness/sessions`、`deepseek-harness-desktop` 等已有路径；与官方共用 `dsh` 来源，不把副本当成新 Agent。
+- **格式**：事件溯源 JSONL；识别 `session.jsonl`、`session.vN.jsonl` 及 `.zstd` / `.gz`，每目录只选择最高代际文件。当前验证到 v4；未知更高版本不猜测解析，并显示未计入提示。
+- **用量**：正式 `assistant/message` 与独立压缩请求 `compaction/summary` 的 `data.usage`。模型优先 `data.message.model`，然后 `data.message.source.model` 或 `data.model`。缓存写入兼容 `cacheWriteTokens` 与旧 `cacheCreationTokens`；推理已包含在输出，不另加。没有真实 usage 的标题/搜索事件不估算。
+- **去重**：会话使用文件头的真实 id；跨路径按会话 + 消息 id / 事件 seq 去重；子会话最后一个 `session/end-seed` 之前的继承历史不计新用量。标题读取 `session/title`，不从对话正文伪造。
 - **坑 1（重复计数）**：`assistant/chunk` 里还有 `data.chunk.usage`（数量几乎相同），那是流式回声，**不能一起加**。
 - **坑 2（口径）**：实测 `totalTokens = inputTokens + outputTokens + cacheReadTokens` → 缓存读取是**独立项**，与 Anthropic 口径一致，不用减。
 - **坑 3（压缩）**：文件是**多帧 zstd 追加写入**。整文件一次 `zlib.zstdDecompressSync` 只能解出第一帧
-  （实测 537KB 只出 198 字符）。必须按 magic `28 B5 2F FD` 切帧逐段解压再拼接。
+  （实测 537KB 只出 198 字符）。必须按 magic `28 B5 2F FD` 切帧逐段解压，拼接字节后再解 UTF-8，不能在帧间插入换行；尾部尚未写完的帧跳过，读取不修改源文件。
   Node ≥ 22.15 自带 `zlib.zstdDecompressSync`（本项目要求 Node 22+）。
+- **官方依据**：[桌面端发布](https://www.deepseek.com/download/)、[共享 home](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/util/home-paths/src/index.ts)、[桌面路径](https://github.com/deepseek-ai/deepseek-harness/blob/master/apps/desktop/src/paths.ts)、[版本化日志](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/session/session-persistence-jsonl/src/format.ts)。
 
 ## 9. OpenCode
 
@@ -212,17 +204,17 @@ UI 的会话清单靠 `sessions[会话id] = {title, cwd}`，各家来源不同�
 
 | 源 | 标题来源 | 匹配键 |
 | --- | --- | --- |
-| Proma | `agent-sessions.json` 的 `sessions[].title` | **`sdkSessionId`**（主）+ `id`（别名）+ 文件名反查 |
+| Mirage | `agent-sessions.json` 的 `sessions[].title` | **`sdkSessionId`**（主）+ `id`（别名）+ 文件名反查 |
 | Claude Desktop | 账本自带 | 账本会话 id |
-| Codex | `~/.codex/session_index.jsonl` 的 `thread_name` | 会话 id（索引只覆盖部分会话） |
+| Codex | `session_index.jsonl` + `state_*.sqlite` 的 `threads.title`，回退真实用户输入；无用户输入的子 Agent 显示任务名与昵称 | 实际线程 id |
 | ZCode / OpenCode / DSH | 各自的库或事件流 | 会话 id |
 | Qoder | 桌面 App `chat_sessions.title`，回退首条用户输入 | 会话 id（App 与 CLI 共用） |
 | Claude Code / Pi / oh-my-Pi | **无索引** → 取首条真实用户输入 | 会话 id |
 
-实现上共用 `sessionMetaFromFiles(files, {sidOf, userTextOf, skip})`：只读文件头部 64KB，
-结果缓存在 `headMetaCache`（标题与 cwd 不会变）。注意三个陷阱：
+实现上共用 `sessionMetaFromFiles(files, {sidOf, userTextOf, skip})`：流式提取真实用户输入及显式重命名事件，
+结果缓存在 `headMetaCache`，文件 mtime 或大小变化时重新读取，避免长上下文和后续重命名被漏掉。注意三个陷阱：
 
-1. 匹配键必须与记录里的 `rec.s` 同一体系（Proma 就是在这上面踩过一次：两套 id 导致全部匹不上）。
+1. 匹配键必须与记录里的 `rec.s` 同一体系（Mirage 就是在这上面踩过一次：两套 id 导致全部匹不上）。
 2. “首条用户输入”要排除工具回传（Claude Code / Qoder 的 `tool_result` 也挂在 `type:"user"` 上），
    以及隐藏上下文前缀（Qoder 的 `[QODER_LIVE_VOICE_CONTEXT]`）。
 3. 一个文件可能对应多个会话 id（续聊/恢复），`sidOf` 允许返回数组。
@@ -231,7 +223,7 @@ UI 的会话清单靠 `sessions[会话id] = {title, cwd}`，各家来源不同�
 
 ## 通用注意事项（做跨机器适配时先看这段）
 
-1. **别按关键字猜目录名**：`dsh-desktop`、`Claude-3p`、`.proma-dev` 都不含产品名，靠 `DSH_HOME`/源码常量或特征文件名（`session.jsonl.zstd`、`usage-ledger`、`rollout-*.jsonl`）去找更可靠。
+1. **别按关键字猜目录名**：`dsh-desktop`、`Claude-3p` 都不含产品名，靠 `DSH_HOME`/源码常量或特征文件名（`session.jsonl.zstd`、`usage-ledger`、`rollout-*.jsonl`）去找更可靠。
 2. **读源码定路径**：解析不出来时，去该工具的 `node_modules` 里找 `*home-paths*`、`*storage*`、`*persistence*` 包，
    看它自己怎么 `join()` 出来的（pnpm 是符号链接，`find` 要加 `-L`）。
 3. **行级预过滤**：先对原始行做 `line.includes('"usage"')` 再 `JSON.parse`，否则 Codex/ZCode 的几百 MB 会拖死首次扫描。

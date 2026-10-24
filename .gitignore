@@ -4,3 +4,5 @@ pricing-config.json
 *.log
 .DS_Store
 dist/
+build/runtime/
+dist-final/
