@@ -20,14 +20,15 @@
 ## 打开就能看到
 
 <p align="center">
-  <img src="./assets/readme/overview.webp" width="100%" alt="Token 查看器 1.4.1 首页：今日 710M tokens、近 7 天趋势、各 Agent 占比环图和四类 Token 磁贴">
+  <img src="./assets/readme/overview.webp" width="100%" alt="Token 查看器首页：今日 710M tokens、近 7 天趋势、各 Agent 占比环图和四类 Token 磁贴">
 </p>
 
 - **今天用了多少**：四类 Token 合计，和昨天同一时刻比较；近 7 天趋势可在 Token 与成本之间切换。
 - **谁用得最多**：各 Agent 占比环图，图例和扇区联动；点卡片进入单个 Agent 的趋势、模型、每日热力和会话列表。
 - **四类 Token 分开算**：非缓存输入、输出、缓存读取、缓存写入，另给出缓存命中率。
 - **任意时间段**：全部时间、近 30 天、近 7 天、今日和自定义日期，切换立即重算。
-- **估算成本**：给模型填四类单价（美元 / 每百万 Token），未计价的模型会明确提示，不当作 0。
+- **估算成本**：给模型填四类单价（美元 / 每百万 Token），未计价的模型会明确提示，不当作 0。内置主流模型价目（含 Claude 5.5、GPT-6、Gemini 4、DeepSeek V4、Kimi K3.1 等），可切换为人民币显示，见 [内置价目](./docs/model-pricing.md)。
+- **会话里用了哪些模型和子 Agent**：Agent 详情的会话明细点一下，行下方就地展开该会话混用的各个模型，按 Token 排名并拆开四类用量与成本；子 Agent 的用量并入主对话，可再展开看子 Agent 的 Token 排行。
 
 <p align="center">
   <img src="./assets/readme/models.webp" width="100%" alt="模型 Token 排名：跨全部 Agent 汇总，显示每个模型的用量、占比和来源 Agent">
@@ -58,7 +59,7 @@
 
 ### Windows 桌面版（推荐）
 
-到 [Releases](https://github.com/kyoka-shuiyue/agent-token-viewer/releases/latest) 下载 `Token-Viewer-Setup-1.4.1-x64.exe`，双击安装即可。安装包自带 Electron 和 Node.js，**不需要另装运行环境，使用时不需要联网**。
+到 [Releases](https://github.com/kyoka-shuiyue/agent-token-viewer/releases/latest) 下载 `Token-Viewer-Setup-1.5.1-x64.exe`，双击安装即可。安装包自带 Electron 和 Node.js，**不需要另装运行环境，使用时不需要联网**。
 
 - 打开后自动扫描本机数据源，首次约 5–15 秒，之后增量读取。
 - 缓存和计价保存在 `%APPDATA%\Token Viewer\`，重启后保留；卸载不会删除这些个人数据。

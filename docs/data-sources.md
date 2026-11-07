@@ -98,6 +98,18 @@
 - **新版用量**：兼容 `token_usage_record.payload.thread_token_usage` 的线程累计值，不把逐请求 `usage` 再相加。子 Agent 的 `subagent_history_start_ordinal` 之前是复制的父线程历史，不能计为新用量；旧式计数器以该边界前累计值为基线。
 - **标题**：先读取 `session_index.jsonl`，再从只读 `state_*.sqlite` 的 `threads` 表补充或更新标题，最后回退会话文件里的真实用户输入。
 
+## 子 Agent 并入主对话
+
+子 Agent 和主 Agent 在各来源里的存放不同，扫描后统一成「主对话 `s` + 子 Agent 标识 `a`」，界面在会话展开里给出子 Agent 的 Token 排行：
+
+| 来源 | 子 Agent 在哪 | 怎么并入 |
+| --- | --- | --- |
+| Claude Code / Cowork | `<会话>/subagents/agent-<id>.jsonl`，记录里的 `sessionId` 就是主会话 | 解析时按文件路径写入 `a = agent-<id>`；名称取同目录 `agent-<id>.meta.json` 的 `description`（缺失时用 `agentType`），角色取 `agentType` |
+| Codex | 独立的 rollout 线程，`session_meta.source.subagent.thread_spawn.parent_thread_id` 指向父线程 | 快照带上父线程与任务名；用量仍先按各自线程 id 取累计增量，再由 `foldSubagents` 并入根会话；名称用 `agent_path` 末段与 `agent_nickname` |
+| OpenCode | `session.parent_id` 非空的会话，标题常带 `(@general subagent)` | 会话元数据记下 `parent`，`foldSubagents` 并入根会话 |
+
+规则：会话元数据里的 `parent` 沿链找到根（防环），根不在数据里时不并入；`a` 已存在则不覆盖。Mirage、Pi、ZCode、DeepSeek Harness 当前数据里没有可靠的父子关系，Qoder 的 `subagents/` 日志仍按独立会话计，尚未并入。
+
 ## 7. ZCode
 
 - **主库（首选）**：`~/.zcode/cli/db/db.sqlite`，表 `model_usage`（逐请求一行）：

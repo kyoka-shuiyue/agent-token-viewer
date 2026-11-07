@@ -1,6 +1,6 @@
 {
   "name": "agent-token-viewer",
-  "version": "1.4.1",
+  "version": "1.5.1",
   "description": "Local-first Agent token usage viewer with a zero-dependency scanner and an Electron desktop app.",
   "license": "MIT",
   "private": false,

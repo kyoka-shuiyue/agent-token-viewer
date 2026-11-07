@@ -13,6 +13,7 @@ cr = 缓存命中读取 token
 cw = 缓存写入 token
 r  = 推理 token（仅作展示，是否计入 o 见下表）
 c  = 该请求已知的真实成本（美元，可选）
+a  = 子 Agent 标识（可选）：有这个字段的记录属于主对话 s 下的某个子 Agent，用量已计入 s
 
 总量 = i + o + cr + cw
 ```
@@ -45,8 +46,9 @@ Claude Code 包含 CLI 和桌面 Code 标签页，Claude Desktop 来源只显示
    ```
    cost = (i·单价.input + o·单价.output + cr·单价.cacheRead + cw·单价.cacheCreation) / 1e6
    ```
-   单价单位：美元 / 每百万 token。留空 = 未计价（按 0 计入总额，UI 会提示"多少个模型未计价"）；填 0 = 免费。
-3. 模型名匹配会先去掉 `[渠道前缀]`、`provider/` 前缀，再尝试去掉 `-thinking` / `-high` / `-free` 等后缀，最后做最长前缀匹配。
+   单价单位：美元 / 每百万 token。留空 = 未计价（按 0 计入总额，UI 会提示"多少个模型未计价"）；填 0 = 免费。内置价目与取价口径见 [model-pricing.md](./model-pricing.md)。
+3. 成本可在「计价配置」里切换为人民币显示：显示值 = 美元成本 × 汇率，不改变统计与单价；设置只存在本地浏览器 / 应用存储。
+4. 模型名匹配会先去掉 `[渠道前缀]`、`provider/` 前缀，再尝试去掉 `-thinking` / `-high` / `-free` 等后缀，最后做最长前缀匹配。
 
 ## 时间
 

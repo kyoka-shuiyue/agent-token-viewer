@@ -145,6 +145,7 @@ module.exports = async function verifyUI(window, appMenu) {
     } finally {S.data=originalData;S.range=originalRange;S.allModels=originalAllModels;S.fx.calm=originalCalm;applyMotionPreference();renderModelRanking();scrollTo({top:0,behavior:'instant'});}
     S.allModels=false;renderModelRanking();
     check('allTenSources',ids.length===10&&ids.includes('mirage')&&!ids.includes('proma'));
+    let subAgentChecked=false;
     for(const id of ids){
       if(id===ids[0]) [...document.querySelectorAll('#agents .agent')].find(el=>el.dataset.agentId===id).scrollIntoView({block:'center',behavior:'instant'});
       openAgent(id);
@@ -156,6 +157,39 @@ module.exports = async function verifyUI(window, appMenu) {
       }
       check(id+'Detail',document.querySelector('#detail h2').textContent===S.data.agents[id].name);
       check(id+'AllSessions',document.querySelectorAll('#sessTable tbody tr').length===Math.max(1,new Set(S.data.agents[id].records.map(r=>r.s).filter(Boolean)).size));
+      if(id===ids[0]) {
+        const sessionTable=document.querySelector('#sessTable');
+        const sessionRow=document.querySelector('#sessTable tr.sess-row');
+        if(sessionRow) {
+          sessionRow.focus();sessionRow.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
+          const panel=sessionRow.nextElementSibling?.querySelector('.sess-panel');
+          await waitUntil(()=>panel&&panel.style.height==='auto');
+          const modelRows=[...document.querySelectorAll('#sessTable .sess-expand .sess-rank-row:not(.head)')];
+          check('sessionInlineOpens',sessionRow.getAttribute('aria-expanded')==='true'&&sessionRow.nextElementSibling.classList.contains('sess-expand')&&panel.style.height==='auto'&&!panel.inert&&modelRows.length>0&&!document.querySelector('.mask.on')&&!document.querySelector('.shell').inert);
+          check('sessionInlineRanked',modelRows.every((row,i)=>i===0||Number(modelRows[i-1].querySelector('.c.k').dataset.v)>=Number(row.querySelector('.c.k').dataset.v)));
+          sessionRow.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
+          await waitUntil(()=>!sessionRow.nextElementSibling?.classList.contains('sess-expand'));
+          check('sessionInlineCloses',sessionRow.getAttribute('aria-expanded')==='false'&&!sessionRow.nextElementSibling?.classList.contains('sess-expand')&&document.activeElement===sessionRow);
+        }
+      }
+      const sessionTableNow=document.querySelector('#sessTable');
+      if(!subAgentChecked) {
+        const withSubs=[...sessionTableNow._sessions.rows.values()].find((row)=>row.subRanked.length);
+        const subRow=withSubs&&document.querySelector('#sessTable tr.sess-row[data-sid="'+CSS.escape(withSubs.id)+'"]');
+        if(subRow) {
+          subRow.click();
+          await waitUntil(()=>subRow._expandTr?.querySelector('.sess-panel').style.height==='auto');
+          const toggle=subRow._expandTr.querySelector('button.sub-toggle'),subPanel=document.getElementById(toggle.getAttribute('aria-controls'));
+          check('subAgentsCollapsed',toggle.getAttribute('aria-expanded')==='false'&&subPanel.inert&&subPanel.getBoundingClientRect().height===0);
+          toggle.click();await waitUntil(()=>subPanel.style.height==='auto');
+          const subRows=[...subPanel.querySelectorAll('.sess-rank-row:not(.head)')];
+          check('subAgentsExpand',toggle.getAttribute('aria-expanded')==='true'&&!subPanel.inert&&subRows.length>0&&subRows.length<=withSubs.subRanked.length);
+          toggle.click();await waitUntil(()=>subPanel.style.height==='0px');
+          check('subAgentsCollapseAgain',toggle.getAttribute('aria-expanded')==='false'&&subPanel.inert);
+          subRow.click();await waitUntil(()=>!subRow._expandTr);
+          subAgentChecked=true;
+        }
+      }
       document.querySelector('#segMode button[data-m="type"]').click();
       document.querySelector('#segGran button[data-g="month"]').click();
       check(id+'Trend',!!document.querySelector('#trend svg'));

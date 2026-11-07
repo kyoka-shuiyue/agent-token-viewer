@@ -213,6 +213,7 @@ table.data tbody tr:hover td{background:var(--paper)}
 table.data td b{color:var(--ink);font-weight:650}
 table.data td .sub{font-size:10.5px;color:var(--ink-3);margin-top:2px}
 .scroll{max-height:360px;overflow:auto}
+.scroll.sess-scroll{max-height:none}
 .scroll::-webkit-scrollbar{width:9px;height:9px}
 .scroll::-webkit-scrollbar-thumb{background:rgba(34,29,24,.16);border-radius:9px;border:2px solid transparent;background-clip:content-box}
 .scroll::-webkit-scrollbar-thumb:hover{background:rgba(34,29,24,.28);background-clip:content-box}
@@ -279,6 +280,69 @@ body.dialog-open{overflow:hidden}
 .price-row input{width:100%;background:var(--paper);border:1px solid var(--line);border-radius:10px;color:var(--ink);padding:7px 9px;font-size:12px;text-align:right;transition:.25s;font-family:var(--font-num)}
 .price-row input:focus{outline:none;border-color:rgba(217,84,31,.5);background:#fff;box-shadow:0 0 0 3px rgba(217,84,31,.10)}
 .modal-foot{display:flex;justify-content:flex-end;gap:10px;margin-top:22px}
+.cur-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin:-6px 0 16px;padding:11px 14px;border:1px solid var(--line);border-radius:14px;background:var(--paper)}
+.cur-label{font-size:12px;color:var(--ink-2);font-weight:600}
+.cur-rate{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--ink-3)}
+.cur-rate input{width:92px;background:var(--card);border:1px solid var(--line);border-radius:10px;color:var(--ink);padding:6px 9px;font-size:12px;text-align:right;font-family:var(--font-num)}
+.cur-rate input:focus{outline:none;border-color:rgba(217,84,31,.5);box-shadow:0 0 0 3px rgba(217,84,31,.10)}
+.cur-note{flex-basis:100%;font-size:11px;color:var(--ink-3);line-height:1.6}
+table.data tbody tr.sess-row{cursor:pointer}
+table.data tbody tr.sess-row:focus-visible{outline:2px solid rgba(217,84,31,.55);outline-offset:-2px}
+.sess-title{display:flex;align-items:flex-start;gap:6px}
+.sess-title .tx{min-width:0;flex:1}
+.chev{flex:none;width:16px;height:22px;display:grid;place-items:center;color:var(--ink-3);font-size:15px;line-height:1;transition:transform var(--motion-ui) var(--ease-out),color var(--motion-fast) ease}
+tr.sess-row[aria-expanded="true"] .chev,.sub-toggle[aria-expanded="true"] .chev{transform:rotate(90deg);color:var(--ember)}
+@media (hover:hover) and (pointer:fine){table.data tbody tr.sess-row:hover .chev{color:var(--ember)}}
+table.data tbody tr.sess-expand:hover td{background:transparent}
+table.data tr.sess-expand td,table.data tr.sess-expand td:first-child{padding:0;min-width:0;max-width:none;border-bottom:1px solid var(--line)}
+.sess-panel,.sub-panel{height:0;opacity:0;overflow:hidden}
+.sess-body{padding:4px 12px 20px 28px;text-align:left;color:var(--ink-2)}
+table.data tr.sess-expand td:first-child b{display:inline;overflow-wrap:normal}
+table.data tr.sess-expand td:first-child .sess-rank-row .nm b{display:block;overflow-wrap:anywhere}
+.sess-stats{display:flex;flex-wrap:wrap;gap:8px 28px;margin:6px 0 16px}
+.sess-stats .st{display:flex;flex-direction:column;min-width:0}
+.sess-stats .l{font-size:10.5px;color:var(--ink-3);letter-spacing:.06em;text-transform:uppercase;font-weight:600}
+.sess-stats .v{font-family:var(--font-num);font-size:21px;line-height:1.3;color:var(--ink)}
+.sess-stats .m{font-size:11px;color:var(--ink-3)}
+.sess-rank-title{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:4px}
+.sess-rank-title h4{font-family:var(--font-display);font-size:14.5px;font-weight:400;color:var(--ink)}
+.sess-rank-title span{font-size:11.5px;color:var(--ink-3)}
+.sess-rank-row{display:grid;grid-template-columns:30px minmax(0,1fr) 74px 54px 52px 70px;gap:10px;align-items:start;padding:11px 0;border-bottom:1px solid var(--line)}
+.sess-rank-row:last-child{border-bottom:0}
+.sess-rank-row.head{align-items:center;padding:8px 0;color:var(--ink-3);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--line-2)}
+.sess-rank-row .rk{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-family:var(--font-num);font-size:12px;color:var(--ink-3);background:var(--paper-2)}
+.sess-rank-row:nth-child(2) .rk{background:var(--ember);color:#fff}
+.sess-rank-row:nth-child(3) .rk{background:var(--amber);color:#fff}
+.sess-rank-row:nth-child(4) .rk{background:var(--sky);color:#fff}
+.sess-rank-row .nm{min-width:0}
+.sess-rank-row .nm b{display:block;font-size:13px;font-weight:650;color:var(--ink);overflow-wrap:anywhere;line-height:1.5}
+.sess-rank-row .bar{height:5px;border-radius:99px;background:var(--paper-2);margin:6px 0 5px;overflow:hidden}
+.sess-rank-row .bar i{display:block;height:100%;border-radius:inherit}
+.sess-rank-row .split{font-size:10.5px;color:var(--ink-3);line-height:1.6;overflow-wrap:anywhere}
+.sess-rank-row .c{text-align:right;font-family:var(--font-num);font-size:12.5px;color:var(--ink-2);padding-top:1px}
+.sess-rank-row .c.k{color:var(--ink);font-weight:650}
+.sess-rank-row.head .c{font-family:inherit;font-size:10.5px;color:var(--ink-3);padding-top:0;font-weight:600}
+.sub-block{margin-top:14px;border-top:1px dashed var(--line-2);padding-top:4px}
+.sub-toggle{display:flex;align-items:center;gap:6px;width:100%;padding:10px 0;text-align:left;font-size:13px;font-weight:600;color:var(--ink);border-radius:8px}
+.sub-toggle:focus-visible{outline:2px solid rgba(217,84,31,.55);outline-offset:2px}
+.sub-toggle em{font-style:normal;font-weight:400;font-size:11.5px;color:var(--ink-3);margin-left:auto;text-align:right}
+.sub-inner{padding:2px 0 4px}
+.more-toggle{display:flex;align-items:center;gap:6px;width:100%;padding:10px 0 4px;font-size:12px;color:var(--ember);border-radius:8px}
+.more-toggle:focus-visible{outline:2px solid rgba(217,84,31,.55);outline-offset:2px}
+.more-toggle .chev{height:18px}
+.more-toggle[aria-expanded="true"] .chev{transform:rotate(90deg)}
+.split-bar{display:flex;gap:2px;height:6px;border-radius:99px;overflow:hidden;background:var(--paper-2);margin:2px 0 6px}
+.split-bar i{display:block;height:100%}
+.split-legend{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:11.5px;color:var(--ink-3);margin-bottom:6px}
+.split-legend b{color:var(--ink);font-family:var(--font-num);font-weight:650}
+.split-legend .sw{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+.sub-role{display:inline-block;font-size:10px;padding:0 7px;border-radius:99px;border:1px solid var(--line-2);color:var(--ink-3);margin-left:7px;font-weight:500;vertical-align:1px;line-height:1.6}
+.sess-foot{margin-top:12px;font-size:11px;color:var(--ink-3);line-height:1.7}
+@media (max-width:640px){
+  .sess-body{padding:2px 4px 16px 4px;position:sticky;left:0;width:calc(100vw - 70px)}
+  .sess-rank-row{grid-template-columns:26px minmax(0,1fr) 64px 60px;gap:8px}
+  .sess-rank-row .c.rec,.sess-rank-row.head .c.rec,.sess-rank-row .c.pct,.sess-rank-row.head .c.pct{display:none}
+}
 .btn{border:1px solid var(--line-2);background:var(--card);color:var(--ink-2);padding:10px 20px;border-radius:12px;font-size:12.5px;font-weight:550;transition:transform .3s var(--ease),box-shadow .3s,color .3s,border-color .3s}
 .btn:hover{color:var(--ink);border-color:var(--ink-3);transform:translateY(-2px);box-shadow:var(--sh-1)}
 .btn.primary{background:linear-gradient(120deg,var(--ember),var(--amber));color:#fff;border:0;font-weight:600;box-shadow:0 10px 24px -12px rgba(217,84,31,.9)}
@@ -385,6 +449,7 @@ table.data td:first-child b{display:block;overflow-wrap:anywhere;line-height:1.6
 footer{gap:10px;color:var(--ink-2)}
 body.calm *,body.calm *::before,body.calm *::after{animation:none!important;transition-duration:0s!important}
 body.calm .modal,body.calm .tweak-panel,body.calm #toast{transform:none}
+body.calm .chev{transition:none}
 body.calm #toast{transform:translateX(-50%)}
 body.calm .agent,body.calm .agent .logo,body.calm .agent .open-arrow,body.calm button{transform:none!important}
 
@@ -636,7 +701,16 @@ body.calm .agent,body.calm .agent .logo,body.calm .agent .open-arrow,body.calm b
 <div class="mask" id="pricingMask" inert aria-hidden="true">
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="pricingTitle" tabindex="-1">
     <h3 id="pricingTitle">计价配置</h3>
-    <div class="desc">单价单位：美元 / 每百万 token。留空表示未计价，填 0 表示免费。保存后自动重算所有 Agent 的预估成本。</div>
+    <div class="desc">单价单位：美元 / 每百万 token。留空表示未计价，填 0 表示免费。保存后自动重算所有 Agent 的预估成本。内置价目按各厂商官方基础档整理，不含长上下文加价。</div>
+    <div class="cur-row">
+      <span class="cur-label" id="curLabel">成本显示币种</span>
+      <div class="seg" id="segCur" role="group" aria-labelledby="curLabel">
+        <button type="button" data-c="USD">美元 $</button>
+        <button type="button" data-c="CNY">人民币 ¥</button>
+      </div>
+      <label class="cur-rate">1 美元 ＝ <input type="number" id="curRate" step="0.0001" min="0.01" max="1000" inputmode="decimal" aria-label="美元兑人民币汇率"> 人民币</label>
+      <span class="cur-note">默认汇率取中国人民银行 2026-10-30 中间价 6.7138，可自行修改。切换只改变成本的显示，上方单价仍按美元填写。</span>
+    </div>
     <div class="scroll" style="max-height:52vh">
       <div class="price-row head"><div>模型</div><div style="text-align:right">输入</div><div style="text-align:right">输出</div><div style="text-align:right">缓存读取</div><div style="text-align:right">缓存写入</div></div>
       <div id="priceRows"></div>
@@ -719,6 +793,8 @@ const S = {
   detailGran: 'auto',
   recentMetric: 'tokens',
   allModels: false,
+  openSessions: new Set(),
+  openSubs: new Set(),
   fx: { calm: false },
 };
 
@@ -774,11 +850,24 @@ const fmt = (n) => {
   return String(Math.round(n));
 };
 const exact = (n) => (n || 0).toLocaleString('en-US');
-const money = (n) => {
-  if (!isFinite(n) || n <= 0) return '$0';
-  if (n < 0.01) return '$' + n.toFixed(4);
-  if (n < 1000) return '$' + n.toFixed(2);
-  return '$' + Math.round(n).toLocaleString('en-US');
+/* 成本币种：单价与统计始终以美元计，仅在显示时按汇率换算。默认汇率取中国人民银行 2026-10-30 中间价。 */
+const CUR = { code: 'USD', rate: 6.7138 };
+try {
+  const saved = JSON.parse(localStorage.getItem('token-viewer-currency') || 'null');
+  if (saved && (saved.code === 'USD' || saved.code === 'CNY')) CUR.code = saved.code;
+  if (saved && saved.rate >= 0.01 && saved.rate <= 1000) CUR.rate = saved.rate;
+} catch { /* 存储不可用或内容损坏时使用默认值 */ }
+function saveCurrency() {
+  try { localStorage.setItem('token-viewer-currency', JSON.stringify(CUR)); } catch { /* 存储不可用 */ }
+}
+const money = (usd) => {
+  const cny = CUR.code === 'CNY';
+  const sym = cny ? '¥' : '$';
+  const n = cny ? usd * CUR.rate : usd;
+  if (!isFinite(n) || n <= 0) return sym + '0';
+  if (n < 0.01) return sym + n.toFixed(4);
+  if (n < 1000) return sym + n.toFixed(2);
+  return sym + Math.round(n).toLocaleString('en-US');
 };
 const pctS = (a, b) => (b > 0 ? ((a / b) * 100).toFixed(1) + '%' : '—');
 // DAILY_INSIGHT_START：纯计算区，供本地日历与同期口径测试复用。
@@ -836,7 +925,16 @@ function normModel(m) {
   if (i >= 0) s = s.slice(i + 1);
   return s;
 }
+let priceMemo = { source: null, hits: new Map() };
 function findPrice(model) {
+  // 单价表整体替换时（保存、刷新）缓存随之失效；逐条记录计价不再每次重排键名。
+  if (priceMemo.source !== S.pricing) priceMemo = { source: S.pricing, hits: new Map() };
+  if (priceMemo.hits.has(model)) return priceMemo.hits.get(model);
+  const price = lookupPrice(model);
+  priceMemo.hits.set(model, price);
+  return price;
+}
+function lookupPrice(model) {
   const key = normModel(model);
   if (!key) return null;
   const P = S.pricing;
@@ -1755,7 +1853,7 @@ function renderDetail(id) {
     </div>
     <div class="card" style="margin-top:16px">
       <div class="card-head"><h3>会话明细</h3><span class="meta" id="sessionCount"></span></div>
-      <div class="scroll"><table class="data" id="sessTable"></table></div>
+      <div class="scroll sess-scroll"><table class="data" id="sessTable"></table></div>
     </div>`;
 
   $('#btnBack').addEventListener('click', backToOverview);
@@ -1913,31 +2011,209 @@ function renderDetail(id) {
   for (const rec of a.records) {
     if (!recordInPeriod(rec, S.range)) continue;
     const sid = rec.s || '(未知)';
-    if (!sess.has(sid)) sess.set(sid, { id: sid, total: 0, calls: 0, cost: 0, last: 0, models: new Set() });
+    if (!sess.has(sid)) sess.set(sid, { id: sid, ...usageBag(), first: Infinity, last: 0, models: new Map(), subs: new Map() });
     const o = sess.get(sid);
-    o.total += rec.i + rec.o + rec.cr + rec.cw;
-    o.calls++;
-    o.cost += recCost(rec);
+    const cost = recCost(rec);
+    addUsage(o, rec, cost);
+    addModelUsage(o.models, rec, cost);
     if (rec.t > o.last) o.last = rec.t;
-    o.models.add(rec.m);
+    if (rec.t > 0 && rec.t < o.first) o.first = rec.t;
+    if (rec.a) {
+      let sub = o.subs.get(rec.a);
+      if (!sub) { sub = { id: rec.a, ...usageBag(), models: new Map() }; o.subs.set(rec.a, sub); }
+      addUsage(sub, rec, cost);
+      addModelUsage(sub.models, rec, cost);
+    }
   }
-  const srows = [...sess.values()].sort((x, y) => y.total - x.total);
-  $('#sessionCount').textContent = srows.length + ' 个会话 · 按用量排序';
+  const byTotal = (x, y) => usageTotal(y) - usageTotal(x);
+  const srows = [...sess.values()].sort(byTotal);
+  for (const row of srows) {
+    row.ranked = [...row.models.values()].sort(byTotal);
+    row.subRanked = [...row.subs.values()].map((sub) => ({ ...sub, ranked: [...sub.models.values()].sort(byTotal) })).sort(byTotal);
+  }
+  $('#sessionCount').textContent = srows.length + ' 个会话 · 按用量排序 · 点击展开模型排行';
   const meta = a.sessions || {};
-  $('#sessTable').innerHTML =
+  const titleOf = (id) => {
+    const m = meta[id] || {};
+    return String(m.title || '').trim() || (m.cwd ? m.cwd.split(/[\\/]/).filter(Boolean).pop() : '') || '未命名会话';
+  };
+  const subTitleOf = (id) => String((meta[id] || {}).title || '').trim() || '子 Agent ' + id.replace(/^agent-/, '').slice(0, 6);
+  const table = $('#sessTable');
+  table._sessions = { agent: a, rows: new Map(srows.map((row) => [row.id, row])), titleOf, subTitleOf, roleOf: (id) => String((meta[id] || {}).role || '') };
+  table.innerHTML =
     '<thead><tr><th>会话</th><th>用量记录</th><th>Token</th><th>成本</th><th>最近活动</th></tr></thead><tbody>' +
-    (srows.length ? srows.map((s) => {
-      const m = meta[s.id] || {};
-      const title = String(m.title || '').trim() || (m.cwd ? m.cwd.split(/[\\/]/).filter(Boolean).pop() : '') || '未命名会话';
-      return `<tr>
-        <td title="${esc(title)} · ${esc(s.id)}"><b>${esc(title)}</b><div class="sub">${esc([...s.models].slice(0, 3).join(' · '))}</div></td>
-        <td class="num" style="text-align:right;white-space:nowrap">${exact(s.calls)} 条</td>
-        <td class="num" style="text-align:right"><b>${fmt(s.total)}</b></td>
-        <td class="num" style="text-align:right">${money(s.cost)}</td>
-        <td class="num" style="text-align:right;white-space:nowrap">${dt(s.last)}</td>
+    (srows.length ? srows.map((row) => {
+      const title = titleOf(row.id);
+      const names = row.ranked.slice(0, 3).map((m) => m.name).join(' · ');
+      const sub = [row.ranked.length > 1 ? `${row.ranked.length} 个模型` : '', row.subRanked.length ? `${row.subRanked.length} 个子 Agent` : '', names + (row.ranked.length > 3 ? ' …' : '')].filter(Boolean).join(' · ');
+      return `<tr class="sess-row" tabindex="0" role="button" aria-expanded="false" data-sid="${esc(row.id)}" aria-label="${esc('「' + title + '」的模型与子 Agent 排行')}">
+        <td title="${esc(title)} · ${esc(row.id)}"><div class="sess-title"><span class="chev" aria-hidden="true">›</span><div class="tx"><b>${esc(title)}</b><div class="sub">${esc(sub)}</div></div></div></td>
+        <td class="num" style="text-align:right;white-space:nowrap">${exact(row.calls)} 条</td>
+        <td class="num" style="text-align:right"><b>${fmt(usageTotal(row))}</b></td>
+        <td class="num" style="text-align:right">${money(row.cost)}</td>
+        <td class="num" style="text-align:right;white-space:nowrap">${dt(row.last)}</td>
       </tr>`;
     }).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--ink-3);padding:26px">当前区间暂无会话</td></tr>') +
     '</tbody>';
+  if (!table._sessionOpenBound) {
+    table.addEventListener('click', (e) => {
+      const sub = e.target.closest('button.sub-toggle,button.more-toggle');
+      if (sub) { toggleSubAgents(sub); return; }
+      const row = e.target.closest('tr.sess-row');
+      if (row) toggleSession(table, row);
+    });
+    table.addEventListener('keydown', (e) => {
+      if ((e.key === 'Enter' || e.key === ' ') && !e.repeat && e.target.matches('tr.sess-row')) { e.preventDefault(); toggleSession(table, e.target); }
+    });
+    table._sessionOpenBound = true;
+  }
+  // 重新渲染（换时间范围、币种等）后，之前展开的会话原样保持展开，不重播动画。
+  $$('tr.sess-row', table).forEach((row) => {
+    if (S.openSessions.has(a.id + ':' + row.dataset.sid)) toggleSession(table, row, { instant: true, open: true });
+  });
+}
+
+/* ---------- 会话展开：模型排行 + 子 Agent 排行 ---------- */
+const usageBag = () => ({ i: 0, o: 0, cr: 0, cw: 0, calls: 0, cost: 0 });
+const usageTotal = (u) => u.i + u.o + u.cr + u.cw;
+function addUsage(u, rec, cost) { u.i += rec.i; u.o += rec.o; u.cr += rec.cr; u.cw += rec.cw; u.calls++; u.cost += cost; }
+function addModelUsage(models, rec, cost) {
+  let m = models.get(rec.m);
+  if (!m) { m = { name: rec.m, ...usageBag(), priced: false }; models.set(rec.m, m); }
+  addUsage(m, rec, cost);
+  if (!m.priced && (rec.c != null || findPrice(rec.m))) m.priced = true;
+}
+
+/** 高度 + 透明度的可中断展开；从当前帧接续，减少动态效果时立即到位。 */
+function settlePanel(panel) {
+  if (panel._panelOpen) {
+    panel.style.height = 'auto';
+    panel.style.opacity = '1';
+    return;
+  }
+  panel.style.height = '0px';
+  panel.style.opacity = '0';
+  panel.inert = true;
+  panel.setAttribute('aria-hidden', 'true');
+  panel._onClosed?.();
+}
+function setPanelOpen(panel, open, instant = false) {
+  const from = panel.getBoundingClientRect().height;
+  const opacity = Number.parseFloat(getComputedStyle(panel).opacity);
+  panel._panelMotion?.cancel();
+  panel._panelOpen = open;
+  if (open) { panel.inert = false; panel.setAttribute('aria-hidden', 'false'); }
+  if (instant) { settlePanel(panel); return; }
+  const fromOpacity = Number.isFinite(opacity) ? opacity : 0;
+  panel.style.height = `${from}px`;
+  panel.style.opacity = String(fromOpacity);
+  const target = open ? panel.scrollHeight : 0;
+  animateUI(panel, '_panelMotion', [
+    { height: `${from}px`, opacity: fromOpacity }, { height: `${target}px`, opacity: open ? 1 : 0 },
+  ], { duration: open ? 260 : 200, easing: 'cubic-bezier(.16,1,.3,1)' }, () => settlePanel(panel));
+}
+
+let sessionPanelSeq = 0;
+const SUB_VISIBLE = 10;
+function sessionPanelHTML(ctx, row, subKey) {
+  const subOpen = S.openSubs.has(subKey), moreOpen = S.openSubs.has(subKey + '#more');
+  const subId = 'sub-' + (++sessionPanelSeq), moreId = subId + '-more';
+  const share = (v) => (usageTotal(row) > 0 ? (v / usageTotal(row)) * 100 : 0);
+  const unpriced = row.ranked.filter((m) => !m.priced).length;
+  const stats = [
+    ['Token', fmt(usageTotal(row)), exact(usageTotal(row))],
+    ['预估成本', money(row.cost), unpriced ? `${unpriced} 个模型未计价` : '全部已计价'],
+    ['用量记录', exact(row.calls), '条'],
+    ['模型', String(row.ranked.length), row.ranked.length > 1 ? '混用多个模型' : '单一模型'],
+    ...(row.subRanked.length ? [['子 Agent', String(row.subRanked.length), '已并入本对话']] : []),
+  ];
+  const rankRows = (items, labelOf, subLineOf, extra, offset = 0) => items.map((m, idx) => {
+    const i = idx + offset;
+    const v = usageTotal(m);
+    const pct = share(v);
+    return `<div class="sess-rank-row">
+      <span class="rk">${i + 1}</span>
+      <div class="nm"><b>${labelOf(m)}</b><div class="bar"><i style="width:${Math.max(pct, 1.5).toFixed(1)}%;background:${PALETTE[i % PALETTE.length]}"></i></div><div class="split">${esc(subLineOf(m))}</div></div>
+      <span class="c k" data-v="${v}">${fmt(v)}</span>
+      <span class="c pct">${pct.toFixed(1)}%</span>
+      <span class="c rec">${exact(m.calls)}</span>
+      <span class="c">${extra(m)}</span>
+    </div>`;
+  }).join('');
+  const head = (first) => `<div class="sess-rank-row head"><span></span><span>${first}</span><span class="c">Token</span><span class="c pct">占比</span><span class="c rec">记录</span><span class="c">成本</span></div>`;
+  const parts = (m) => [['输入', m.i], ['输出', m.o], ['缓存读', m.cr], ['缓存写', m.cw]].filter(([, n]) => n > 0).map(([l, n]) => `${l} ${fmt(n)}`).join(' · ');
+  const modelBlock = `<div class="sess-rank-title"><h4>模型 Token 排行</h4><span>${esc(rangeLabel())} · 共 ${row.ranked.length} 个模型${row.subRanked.length ? '（含子 Agent）' : ''}</span></div>` +
+    `<div class="sess-rank">${head('模型')}${rankRows(row.ranked, (m) => esc(m.name), parts, (m) => (m.priced ? money(m.cost) : '未计价'))}</div>`;
+
+  let subBlock = '';
+  if (row.subRanked.length) {
+    const subTotal = row.subRanked.reduce((n, sub) => n + usageTotal(sub), 0);
+    const subCost = row.subRanked.reduce((n, sub) => n + sub.cost, 0);
+    const mainTotal = Math.max(0, usageTotal(row) - subTotal);
+    const mainPct = share(mainTotal), subPct = share(subTotal);
+    const topModels = (sub) => sub.ranked.slice(0, 3).map((m) => `${m.name} ${fmt(usageTotal(m))}`).join(' · ') + (sub.ranked.length > 3 ? ' …' : '');
+    const label = (sub) => {
+      const role = ctx.roleOf(sub.id);
+      return esc(ctx.subTitleOf(sub.id)) + (role ? `<span class="sub-role">${esc(role)}</span>` : '');
+    };
+    const rest = row.subRanked.slice(SUB_VISIBLE);
+    subBlock = `<div class="sub-block">
+      <button type="button" class="sub-toggle" data-key="${esc(subKey)}" aria-expanded="${subOpen}" aria-controls="${subId}"><span class="chev" aria-hidden="true">›</span>子 Agent Token 排行<em>${row.subRanked.length} 个 · 占本对话 ${subPct.toFixed(1)}%</em></button>
+      <div class="sub-panel" id="${subId}" role="region" aria-label="子 Agent Token 排行" ${subOpen ? 'style="height:auto;opacity:1"' : 'inert aria-hidden="true"'}><div class="sub-inner">
+        <div class="split-bar" role="img" aria-label="主 Agent ${mainPct.toFixed(1)}%，子 Agent ${subPct.toFixed(1)}%"><i style="width:${mainPct.toFixed(2)}%;background:${PALETTE[3]}"></i><i style="width:${subPct.toFixed(2)}%;background:${PALETTE[0]}"></i></div>
+        <div class="split-legend"><span><span class="sw" style="background:${PALETTE[3]}"></span>主 Agent <b>${fmt(mainTotal)}</b> · ${mainPct.toFixed(1)}%</span><span><span class="sw" style="background:${PALETTE[0]}"></span>子 Agent 合计 <b>${fmt(subTotal)}</b> · ${subPct.toFixed(1)}% · ${priceOf(subCost, row.subRanked)}</span></div>
+        <div class="sess-rank">${head('子 Agent')}${rankRows(row.subRanked.slice(0, SUB_VISIBLE), label, topModels, (sub) => priceOf(sub.cost, [sub]))}</div>
+        ${rest.length ? `<button type="button" class="more-toggle" data-key="${esc(subKey + '#more')}" data-count="${rest.length}" aria-expanded="${moreOpen}" aria-controls="${moreId}"><span class="chev" aria-hidden="true">›</span>${moreOpen ? '收起' : `显示其余 ${rest.length} 个子 Agent`}</button>
+        <div class="sub-panel" id="${moreId}" ${moreOpen ? 'style="height:auto;opacity:1"' : 'inert aria-hidden="true"'}><div class="sess-rank">${rankRows(rest, label, topModels, (sub) => priceOf(sub.cost, [sub]), SUB_VISIBLE)}</div></div>` : ''}
+      </div></div>
+    </div>`;
+  }
+  return `<div class="sess-stats">${stats.map(([l, v, m]) => `<div class="st"><span class="l">${esc(l)}</span><span class="v">${esc(v)}</span><span class="m">${esc(m)}</span></div>`).join('')}</div>` +
+    modelBlock + subBlock +
+    `<div class="sess-foot">${row.subRanked.length ? '子 Agent 的用量已并入主对话，占比按整个对话的 Token 计算。' : ''}统计范围跟随当前时间筛选；记录数是用量记录，不等于 API 请求次数。</div>`;
+}
+const priceOf = (cost, items) => (items.every((it) => it.ranked.every((m) => !m.priced)) ? '未计价' : money(cost));
+
+function toggleSession(table, tr, { instant = false, open } = {}) {
+  const ctx = table._sessions;
+  const row = ctx?.rows.get(tr.dataset.sid);
+  if (!row) return;
+  const key = ctx.agent.id + ':' + tr.dataset.sid;
+  const next = open ?? tr.getAttribute('aria-expanded') !== 'true';
+  let expand = tr._expandTr;
+  if (next) {
+    if (!expand) {
+      expand = document.createElement('tr');
+      expand.className = 'sess-expand';
+      const subKey = key + '#sub';
+      expand.innerHTML = `<td colspan="5"><div class="sess-panel" role="region" aria-label="${esc('「' + ctx.titleOf(row.id) + '」的模型与子 Agent 排行')}" style="height:0;opacity:0" inert aria-hidden="true"><div class="sess-body" data-sub-key="${esc(subKey)}">${sessionPanelHTML(ctx, row, subKey)}</div></div></td>`;
+      tr.after(expand);
+      tr._expandTr = expand;
+    }
+    const panel = expand.querySelector('.sess-panel');
+    panel._onClosed = () => { if (!panel._panelOpen) { expand.remove(); if (tr._expandTr === expand) tr._expandTr = null; } };
+    tr.setAttribute('aria-expanded', 'true');
+    S.openSessions.add(key);
+    setPanelOpen(panel, true, instant);
+  } else if (expand) {
+    tr.setAttribute('aria-expanded', 'false');
+    S.openSessions.delete(key);
+    setPanelOpen(expand.querySelector('.sess-panel'), false, instant);
+  }
+}
+
+function toggleSubAgents(button) {
+  const panel = document.getElementById(button.getAttribute('aria-controls'));
+  if (!panel) return;
+  const open = button.getAttribute('aria-expanded') !== 'true';
+  const key = button.dataset.key;
+  button.setAttribute('aria-expanded', String(open));
+  if (button.classList.contains('more-toggle')) {
+    const count = button.dataset.count || '';
+    button.lastChild.textContent = open ? '收起' : `显示其余 ${count} 个子 Agent`;
+  }
+  if (key) { if (open) S.openSubs.add(key); else S.openSubs.delete(key); }
+  setPanelOpen(panel, open);
 }
 
 const sourceDetails = $('.source-details');
@@ -2013,6 +2289,12 @@ function renderSources() {
 /* ============================================================
    7. 计价配置
    ============================================================ */
+function syncCurrencyControls() {
+  $$('#segCur button').forEach((b) => b.classList.toggle('on', b.dataset.c === CUR.code));
+  $('#curRate').value = CUR.rate;
+  syncSegments($('#segCur'));
+}
+
 function openPricing() {
   const used = new Map();
   for (const a of visibleAgents()) {
@@ -2033,6 +2315,7 @@ function openPricing() {
   }).join('');
   $$('#priceRows input').forEach((inp) => inp.setAttribute('aria-label', inp.dataset.m + ' ' + ({input:'输入',output:'输出',cacheRead:'缓存读取',cacheCreation:'缓存写入'}[inp.dataset.k]) + '单价'));
   setDialog('pricingMask', true);
+  syncCurrencyControls();
 }
 
 async function savePricing() {
@@ -2198,6 +2481,21 @@ $('#btnRefresh').addEventListener('click', refresh);
 $('#btnPricing').addEventListener('click', openPricing);
 $('#priceCancel').addEventListener('click', () => setDialog('pricingMask', false));
 $('#priceSave').addEventListener('click', savePricing);
+$('#segCur').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-c]');
+  if (!b || b.dataset.c === CUR.code) return;
+  CUR.code = b.dataset.c;
+  saveCurrency();
+  syncCurrencyControls();
+  render(false);
+});
+$('#curRate').addEventListener('change', () => {
+  const v = Number($('#curRate').value);
+  if (!(v >= 0.01 && v <= 1000)) { $('#curRate').value = CUR.rate; toast('汇率需在 0.01–1000 之间'); return; }
+  CUR.rate = v;
+  saveCurrency();
+  if (CUR.code === 'CNY') render(false);
+});
 $$('.mask').forEach((mask) => mask.addEventListener('click', (e) => { if (e.target === mask) setDialog(mask.id, false); }));
 
 /* 动效开关 */

@@ -22,3 +22,7 @@
 - 总览模型排名按原始模型标识跨 Agent 汇总，跟随主时间筛选，与摘要四类 Token 总量一致；前10名可展开全部，来源按钮可进入 Agent。模型行复用、重排/条形/数字动效可中断，减少动态效果立即完成。
 - Claude Code按工作类型包含CLI和桌面Code；Claude Desktop来源为Cowork。两者共享一次只读扫描，不能因桌面声明排除主projects日志后又不读取；台账surface显式分流、同请求最大完整usage去重。重叠台账/逐请求按会话/日/model取更完整覆盖，旧stats-cache仅补正余额，整数拆分守恒并显示历史截止日期；记录计数不冒充请求次数。
 - 模型排名头部保留稳定的展开与时间操作栏，时间入口共用 S.range；用户在排名处筛选后保持标题锚点与焦点。展开高度过渡从当前帧接续，支持中途反向及减少动态效果立即清理；宽屏、820/960和390px均验证按钮中心真实命中。
+- 会话明细行可点击（Enter/空格同样），在行下方就地展开（不弹窗）：模型 Token 排行，其下是可折叠的子 Agent Token 排行（前 10 个，其余再展开）。展开/收起共用 setPanelOpen，高度+透明度，可中断、从当前帧接续，减少动态效果立即到位；展开状态存 S.openSessions/S.openSubs，重渲染后不重播动画地恢复。会话表容器不限高。
+- 子 Agent 并入主对话：记录 `s` 为主对话，`a` 为子 Agent 标识（Claude 来自 subagents 文件路径，Codex/OpenCode 由会话元数据 `parent` 经 foldSubagents 折叠）。新增来源若有独立子会话，在 sessions 里写 `parent` 即可；改变记录字段时同步升 CACHE_VERSION。
+- 内置价目在 server.js 的 PRICE_ROWS，取价口径、来源与可信度写在 docs/model-pricing.md，核验日期 2026-11-01；只含基础档，不含长上下文、Batch 与高峰加价（部分来源按轮或按日汇总，无法可靠判断单次提示长度）。更新价目时同步改 PRICING_DEFAULTS_VERSION 与 LEGACY_PRICING：migratePricing 只替换仍等于旧默认值的条目、补缺失模型，用户改过或自加的保留，并备份为 `.before-<版本>.bak`，每个版本只迁移一次。
+- 成本币种（美元/人民币）只改显示：`money()` 按 CUR 汇率换算，统计与单价仍为美元；设置存浏览器本地存储，不进计价配置。默认汇率取央行 2026-10-30 中间价 6.7138。

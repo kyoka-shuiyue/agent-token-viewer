@@ -65,6 +65,7 @@
     }, null, ctx.stats, hasAny('"usage"'));
 
     return { records, sessions: {}, note: '' };
+    // 若来源有子 Agent 且是独立会话：在 sessions[子会话id] 里写 { parent: 父会话id }，扫描后会并入主对话。
     // note 用于说明口径妥协，例如"早期文件已清理，此处取自官方按天统计"，UI 会显式提示
   },
 }

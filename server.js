@@ -31,7 +31,7 @@ const DATA_ROOT = process.env.TOKEN_VIEWER_DATA_DIR ? path.resolve(process.env.T
 const AUTH_TOKEN = process.env.TOKEN_VIEWER_AUTH_TOKEN || '';
 const CACHE_FILE = path.join(DATA_ROOT, '.scan-cache.json');
 // 解析规则改变后，历史文件也必须重读，不能只靠 mtime / size 判断。
-const CACHE_VERSION = 5;
+const CACHE_VERSION = 6;
 const PRICING_FILE = path.join(DATA_ROOT, 'pricing-config.json');
 const LOCALAPPDATA = process.env.LOCALAPPDATA || path.join(HOME, 'AppData', 'Local');
 const APPDATA = process.env.APPDATA || path.join(HOME, 'AppData', 'Roaming');
@@ -233,6 +233,12 @@ function claudeFileSessionId(file) {
   return path.basename(file, '.jsonl');
 }
 
+/** Claude 子 Agent 日志 `<会话>/subagents/agent-<id>.jsonl` 的 agent id；主会话文件返回空串。 */
+function claudeSubagentId(file) {
+  const parts = path.resolve(file).split(path.sep);
+  return parts.length >= 3 && parts[parts.length - 2] === 'subagents' ? path.basename(file, '.jsonl') : '';
+}
+
 /** Claude Code 格式行解析（CLI 与 Claude Desktop 沙箱共用） */
 function ccLineHandler(o, st) {
   if (o.type !== 'assistant') return null;
@@ -246,7 +252,9 @@ function ccLineHandler(o, st) {
     cr: num(u.cache_read_input_tokens), cw: num(u.cache_creation_input_tokens), r: 0,
     s: o.sessionId || claudeFileSessionId(st.file),
   });
-  return rec ? { ...rec, requestId: String(id) } : null;
+  if (!rec) return null;
+  const sub = claudeSubagentId(st.file);
+  return { ...rec, requestId: String(id), ...(sub ? { a: sub } : {}) };
 }
 
 /** Pi / oh-my-Pi 共用行解析 */
@@ -811,6 +819,19 @@ async function scanClaudeUsage({
     sessions[claudeOutputKind(kind)][id] = { ...metadata };
   }
 
+  // 子 Agent 的日志与主会话共用 sessionId；这里补它们的名称与角色，供界面在主对话里单独排名。
+  const subagentFiles = new Map(sourceFiles.map((entry) => [claudeSubagentId(entry.file), entry.file]).filter(([id]) => id));
+  for (const bucket of selected) {
+    const target = sessions[claudeOutputKind(bucket.kind)];
+    for (const rec of bucket.records) {
+      if (!rec.a || target[rec.a]) continue;
+      let info = {};
+      const file = subagentFiles.get(rec.a);
+      if (file) { try { info = JSON.parse(fs.readFileSync(file.replace(/\.jsonl$/i, '.meta.json'), 'utf8')) || {}; } catch { /* 无元数据文件 */ } }
+      target[rec.a] = { title: String(info.description || info.agentType || '').trim(), parent: rec.s, role: String(info.agentType || '') };
+    }
+  }
+
   const selectedRecords = selected.flatMap((bucket) => bucket.records);
   const statsHistory = await claudeStatsRecords(statsFile, selectedRecords);
   const codeRecords = selected.filter((bucket) => bucket.kind === 'code').flatMap((bucket) => bucket.records);
@@ -1103,6 +1124,11 @@ const AGENT_DEFS = [
         records.push(...codexDeltas(s.snaps, sid));
       }
       const sessions = await codexTitles();
+      const spawned = new Map();
+      for (const [sid, s] of perSession) {
+        const first = s.snaps.find((snap) => snap.p);
+        if (first) spawned.set(sid, first);
+      }
       const missingFiles = files.filter((f) => {
         const snaps = scanCacheNext[f]?.records || [];
         return snaps.some((snap) => !sessions[snap.s]?.title);
@@ -1115,6 +1141,11 @@ const AGENT_DEFS = [
       for (const [sid, meta] of Object.entries(fallback)) {
         const current = sessions[sid] || {};
         sessions[sid] = { ...meta, ...current, title: current.title || meta.title, cwd: current.cwd || meta.cwd };
+      }
+      // 子 Agent 线程记下父线程；runScan 会把它们的用量并入主对话，名称用任务名与昵称。
+      for (const [sid, snap] of spawned) {
+        const current = sessions[sid] || {};
+        sessions[sid] = { ...current, title: snap.at || current.title || '', parent: snap.p };
       }
       return { records, sessions };
     },
@@ -1195,11 +1226,13 @@ const AGENT_DEFS = [
           }
 
           try {
-            const srows = db.prepare('SELECT id, title, model, agent FROM session').all();
+            let srows = [];
+            try { srows = db.prepare('SELECT id, title, model, agent, parent_id FROM session').all(); }
+            catch { srows = db.prepare('SELECT id, title, model, agent FROM session').all(); }
             for (const s of srows) {
               let model = '';
               try { model = s.model ? (JSON.parse(s.model).id || '') : ''; } catch { model = s.model || ''; }
-              sessions[s.id] = { title: s.title || '', model, agent: s.agent || '' };
+              sessions[s.id] = { title: s.title || '', model, agent: s.agent || '', ...(s.parent_id ? { parent: s.parent_id } : {}) };
             }
           } catch { /* 表结构不同则忽略 */ }
         } catch { /* 数据库无法打开则跳过 */ }
@@ -1235,6 +1268,8 @@ function codexSnapshotHandler(o, st) {
     const meta = o.payload || {};
     st.sid = meta.id || meta.session_id || st.sid;
     st.historyStart = num(meta.subagent_history_start_ordinal);
+    st.parent = meta.source?.subagent?.thread_spawn?.parent_thread_id || '';
+    st.agentTitle = st.parent ? codexAgentTitle(o) : '';
     return null;
   }
   if (o.type === 'turn_context') { st.model = (o.payload && o.payload.model) || st.model; return null; }
@@ -1260,6 +1295,7 @@ function codexSnapshotHandler(o, st) {
     // Codex 的 input 包含缓存命中，这里拆成「非缓存输入 + 缓存命中」避免重复计数
     i: Math.max(0, input - cached), o: output, cr: cached, cw: 0,
     r: Math.max(0, num(cum.reasoning_output_tokens) - num(base?.reasoning_output_tokens)),
+    ...(st.parent ? { p: st.parent, at: st.agentTitle || '' } : {}),
   };
 }
 
@@ -1469,26 +1505,115 @@ async function qoderSessionMeta(stats) {
 /* 计价配置                                                             */
 /* ------------------------------------------------------------------ */
 
-const DEFAULT_PRICING = {
+/**
+ * 内置单价：美元 / 百万 token，按各厂商价目表的基础档（短上下文、标准时段、5 分钟缓存写入）整理，核验日期 2026-11-01。
+ * 长上下文加价、DeepSeek 高峰时段加价和 Gemini 4 Argon 12-01 起的涨价不在此表，详见 docs/model-pricing.md。
+ * 行格式：[模型, 输入, 输出, 缓存读取, 缓存写入]；null 表示该来源不单独计费。
+ */
+const PRICE_ROWS = [
+  // Anthropic
+  ['claude-fable-5-1', 10, 50, 0.25, 12.5], ['claude-fable-5', 10, 50, 1, 12.5],
+  ['claude-opus-5-5', 4, 20, 0.2, 5], ['claude-opus-5', 5, 25, 0.5, 6.25],
+  ['claude-opus-4-8', 5, 25, 0.5, 6.25], ['claude-opus-4-7', 5, 25, 0.5, 6.25],
+  ['claude-opus-4-6', 5, 25, 0.5, 6.25], ['claude-opus-4-5', 5, 25, 0.5, 6.25],
+  ['claude-opus-4-1', 15, 75, 1.5, 18.75], ['claude-opus-4', 15, 75, 1.5, 18.75],
+  ['claude-sonnet-5-5', 2, 10, 0.1, 2.5], ['claude-sonnet-5', 2, 10, 0.2, 2.5],
+  ['claude-sonnet-4-6', 3, 15, 0.3, 3.75], ['claude-sonnet-4-5', 3, 15, 0.3, 3.75], ['claude-sonnet-4', 3, 15, 0.3, 3.75],
+  ['claude-haiku-5-5', 0.1, 0.5, 0.01, 0.125], ['claude-haiku-4-5', 1, 5, 0.1, 1.25], ['claude-haiku-3-5', 0.8, 4, 0.08, 1],
+  // OpenAI
+  ['gpt-6-astra', 10, 50, 1, null], ['gpt-6.1-sol', 2, 10, 0.1, null], ['gpt-6-sol', 2, 10, 0.2, null],
+  ['gpt-6.1-terra', 1, 5, 0.05, null], ['gpt-6-luna', 0.1, 0.5, 0.01, null],
+  ['gpt-5.6-sol', 4, 20, 0.4, null], ['gpt-5.6-terra', 2, 12, 0.2, null], ['gpt-5.6-luna', 0.2, 1.2, 0.02, null],
+  ['gpt-5.5', 5, 30, 0.5, null], ['gpt-5.5-pro', 30, 180, null, null],
+  ['gpt-5.4', 2.5, 15, 0.25, null], ['gpt-5.4-pro', 30, 180, null, null],
+  ['gpt-5.4-mini', 0.75, 4.5, 0.075, null], ['gpt-5.4-nano', 0.2, 1.25, 0.02, null],
+  ['gpt-5.3-codex', 1.75, 14, 0.175, null], ['gpt-5.2', 1.75, 14, 0.175, null],
+  ['gpt-5.1', 1.25, 10, 0.125, null], ['gpt-5', 1.25, 10, 0.125, null],
+  ['gpt-5-mini', 0.25, 2, 0.025, null], ['gpt-5-nano', 0.05, 0.4, 0.005, null],
+  ['gpt-4.1', 2, 8, 0.5, null], ['gpt-4.1-mini', 0.4, 1.6, 0.1, null], ['gpt-4.1-nano', 0.1, 0.4, 0.025, null],
+  ['gpt-4o', 2.5, 10, 1.25, null], ['gpt-4o-mini', 0.15, 0.6, 0.075, null],
+  ['gpt-4-turbo', 10, 30, null, null], ['gpt-3.5-turbo', 0.5, 1.5, null, null],
+  ['o4-mini', 1.1, 4.4, 0.275, null],
+  // Google
+  ['gemini-4-argon', 2, 10, 0.1, null], ['gemini-3.8-flash', 0.75, 3.75, 0.075, null], ['gemini-3.7-flash', 0.75, 3.75, 0.075, null], ['gemini-3.6-flash', 0.75, 3.75, 0.075, null],
+  ['gemini-3.5-flash-lite', 0.3, 2.5, 0.03, null], ['gemini-omni-1.1-flash', 1.5, 9, null, null],
+  ['gemini-3.1-pro-preview', 2, 12, 0.2, null], ['gemini-3.1-flash-lite', 0.25, 1.5, 0.025, null], ['gemini-3-flash-preview', 0.5, 3, 0.05, null],
+  ['gemini-2.5-pro', 1.25, 10, 0.125, null], ['gemini-2.5-flash', 0.3, 2.5, 0.03, null], ['gemini-2.5-flash-lite', 0.1, 0.4, 0.01, null],
+  ['gemini-2.0-flash', 0.075, 0.3, 0.01875, 0.09375], ['gemini-1.5-pro', 1.25, 5, 0.3125, 1.5625], ['gemini-1.5-flash', 0.075, 0.3, 0.01875, 0.09375],
+  // xAI / Meta
+  ['grok-4.7', 2, 6, 0.5, null], ['grok-4.6', 2, 6, 0.5, null], ['grok-4.5', 2, 6, 0.3, null],
+  ['grok-4.3', 1.25, 2.5, 0.2, null], ['grok-build-0.1', 1, 2, 0.2, null], ['grok-2', 2, 10, null, null], ['grok-beta', 5, 15, null, null],
+  ['muse-wonder', 4, 20, null, null], ['muse-spark-open', 1.25, 4.25, null, null], ['llama-3.3-70b', 0.35, 0.4, null, null],
+  // DeepSeek（低谷时段价；高峰时段为 2 倍）
+  ['deepseek-v4-pro', 0.66, 1.98, 0.022, 0.66], ['deepseek-v4-flash', 0.15, 0.6, 0.003, 0.15],
+  ['deepseek-v4.1-flash', 0.15, 0.6, 0.003, 0.15], ['deepseek-flash', 0.15, 0.6, 0.003, 0.15],
+  ['deepseek-v3', 0.27, 1.1, null, null], ['deepseek-chat', 0.14, 0.28, null, null],
+  // Moonshot / Zhipu / Alibaba / MiniMax / Xiaomi / Mistral
+  ['kimi-k3.1-pro-highspeed', 4, 20, 0.2, 4], ['kimi-k3.1-pro', 2, 10, 0.2, 2], ['kimi-k3', 3, 15, 0.3, 3],
+  ['kimi-k2.7-code', 0.95, 4, 0.19, null], ['kimi-k2.6', 0.95, 4, 0.16, null], ['kimi-k2.5', 0.6, 3, 0.1, null],
+  ['glm-5.3', 1.4, 4.4, 0.26, null], ['glm-5.3-flashx', 0.37, 1.25, 0.075, null], ['glm-5.3-flash', 0.15, 0.5, 0.03, null], ['glm-5.2', 1.4, 4.4, 0.26, null], ['glm-5.1', 1.4, 4.4, 0.26, null],
+  ['glm-5', 1, 3.2, 0.2, null], ['glm-4.7', 0.6, 2.2, 0.11, null], ['glm-4.6', 0.6, 2.2, 0.11, null], ['glm-4.5', 0.6, 2.2, 0.11, null], ['glm-4.7-flash', 0, 0, 0, 0],
+  ['qwen3.8-max', 2, 6, null, null], ['qwen3.8-flash', 0.15, 0.47, 0.016, null], ['qwen-max', 0.28, 0.28, null, null], ['qwen-plus', 0.057, 0.057, null, null],
+  ['minimax-m3.1-flash', 0.15, 0.6, 0.015, null], ['minimax-m3', 0.3, 1.2, 0.06, null],
+  ['mimo-v2.6-pro', 0.435, 0.87, 0.0036, null], ['mimo-v2.6-flash', 0.14, 0.28, 0.0028, null],
+  ['mistral-large', 2, 6, null, null],
+  // 免费通道（OpenCode 等渠道的限免与隐名测试模型）
+  ['big-pickle', 0, 0, 0, 0], ['minimax-m3-free', 0, 0, 0, 0], ['deepseek-v4-flash-free', 0, 0, 0, 0],
+  ['space-bunny-free', 0, 0, 0, 0], ['x-preview-f-free', 0, 0, 0, 0], ['ll-alpha-free', 0, 0, 0, 0],
+  ['step-5-preview-free', 0, 0, 0, 0], ['nemotron-3-ultra-free', 0, 0, 0, 0],
+  // Qoder 的 qfmodel 不公开美元单价（按官方 credits 套餐计费），留空让用户自己按套餐折算
+  ['qfmodel', null, null, null, null],
+];
+const priceEntry = ([, input, output, cacheRead, cacheCreation]) => ({ input, output, cacheRead, cacheCreation });
+const DEFAULT_PRICING = Object.fromEntries(PRICE_ROWS.map((row) => [row[0], priceEntry(row)]));
+/** 1.4.1 及以前的内置单价：只有仍与这份旧默认值逐项相同的条目才会被新默认值自动替换。 */
+const LEGACY_PRICING = {
   'claude-opus-5': { input: 15, output: 75, cacheRead: 1.5, cacheCreation: 18.75 },
   'claude-sonnet-4': { input: 3, output: 15, cacheRead: 0.3, cacheCreation: 3.75 },
   'claude-sonnet-3.5': { input: 3, output: 15, cacheRead: 0.3, cacheCreation: 3.75 },
   'claude-haiku-4-5': { input: 1, output: 5, cacheRead: 0.1, cacheCreation: 1.25 },
   'claude-haiku-3.5': { input: 1, output: 5, cacheRead: 0.1, cacheCreation: 1.25 },
-  'gpt-4o': { input: 2.5, output: 10, cacheRead: 1.25, cacheCreation: null },
-  'gpt-4o-mini': { input: 0.15, output: 0.6, cacheRead: 0.075, cacheCreation: null },
-  'gpt-4-turbo': { input: 10, output: 30, cacheRead: null, cacheCreation: null },
   'deepseek-v4-flash': { input: 0.28, output: 0.42, cacheRead: 0.028, cacheCreation: 0.28 },
   'deepseek-v4-pro': { input: 0.55, output: 2.19, cacheRead: 0.055, cacheCreation: 0.55 },
-  'big-pickle': { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 },
-  'minimax-m3-free': { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 },
-  'deepseek-v4-flash-free': { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 },
-  // Qoder 的 qfmodel 不公开美元单价（按官方 credits 套餐计费），留空让用户自己按套餐折算
-  'qfmodel': { input: null, output: null, cacheRead: null, cacheCreation: null },
 };
+const PRICING_DEFAULTS_VERSION = '2026-11-01';
+const PRICING_META_FILE = path.join(DATA_ROOT, 'pricing-config.meta.json');
+const samePrice = (a, b) => ['input', 'output', 'cacheRead', 'cacheCreation'].every((k) => (a?.[k] ?? null) === (b?.[k] ?? null));
+
+/**
+ * 升级旧配置：缺失的新模型补入；仍等于旧内置默认值的条目换成新价格；已被用户改过的条目原样保留。
+ * 每个默认值版本只迁移一次，之后用户再删掉的条目不会被补回。
+ */
+function migratePricing(current) {
+  const next = { ...current };
+  const changed = { added: [], updated: [], removed: [] };
+  for (const [model, legacy] of Object.entries(LEGACY_PRICING)) {
+    if (!next[model] || !samePrice(next[model], legacy)) continue;
+    if (DEFAULT_PRICING[model]) { next[model] = { ...DEFAULT_PRICING[model] }; changed.updated.push(model); }
+    else { delete next[model]; changed.removed.push(model); }
+  }
+  for (const [model, price] of Object.entries(DEFAULT_PRICING)) {
+    if (next[model]) continue;
+    next[model] = { ...price };
+    changed.added.push(model);
+  }
+  return { pricing: next, changed };
+}
 
 async function ensurePricingFile() {
-  if (isFile(PRICING_FILE)) return;
+  let meta = null;
+  try { meta = JSON.parse(await fsp.readFile(PRICING_META_FILE, 'utf8')); } catch { /* 首次或旧版本 */ }
+  const markVersion = () => fsp.writeFile(PRICING_META_FILE, JSON.stringify({ defaultsVersion: PRICING_DEFAULTS_VERSION }), 'utf8');
+  if (isFile(PRICING_FILE)) {
+    if (meta?.defaultsVersion === PRICING_DEFAULTS_VERSION) return;
+    try {
+      const { pricing } = migratePricing(loadPricing());
+      await fsp.copyFile(PRICING_FILE, `${PRICING_FILE}.before-${PRICING_DEFAULTS_VERSION}.bak`);
+      await fsp.writeFile(PRICING_FILE, JSON.stringify(pricing, null, 2), 'utf8');
+      await markVersion();
+    } catch { /* 迁移失败时保持原配置 */ }
+    return;
+  }
   const merged = { ...DEFAULT_PRICING };
   try {
     const preset = JSON.parse(await fsp.readFile(PRESET_FILE, 'utf8'));
@@ -1496,7 +1621,7 @@ async function ensurePricingFile() {
       if (!merged[k] && v && typeof v === 'object') merged[k] = v;
     }
   } catch { /* 无预设文件则只用内置默认 */ }
-  try { await fsp.writeFile(PRICING_FILE, JSON.stringify(merged, null, 2), 'utf8'); } catch { /* 忽略 */ }
+  try { await fsp.writeFile(PRICING_FILE, JSON.stringify(merged, null, 2), 'utf8'); await markVersion(); } catch { /* 忽略 */ }
 }
 
 function loadPricing() {
@@ -1506,6 +1631,30 @@ function loadPricing() {
 /* ------------------------------------------------------------------ */
 /* 扫描编排                                                             */
 /* ------------------------------------------------------------------ */
+
+/**
+ * 子 Agent 与主 Agent 在部分来源里是不同会话（Codex 子线程、OpenCode 子会话）。
+ * 沿 `parent` 找到根会话，把用量并入主对话，并在记录上用 `a` 保留原会话 id，界面据此给子 Agent 单独排名。
+ * Claude 子 Agent 日志本来就共用主会话 id，解析时已带 `a`，这里不会重复处理。
+ */
+function foldSubagents(records, sessions) {
+  const rootOf = (sid) => {
+    const seen = new Set();
+    let current = sid;
+    while (sessions[current]?.parent && !seen.has(current)) { seen.add(current); current = sessions[current].parent; }
+    return current;
+  };
+  const roots = new Map();
+  for (const rec of records) {
+    if (!sessions[rec.s]?.parent) continue;
+    if (!roots.has(rec.s)) roots.set(rec.s, rootOf(rec.s));
+    const root = roots.get(rec.s);
+    if (root === rec.s) continue;
+    if (!rec.a) rec.a = rec.s;
+    rec.s = root;
+  }
+  return records;
+}
 
 let scanState = { phase: 'idle', startedAt: 0, done: 0, total: AGENT_DEFS.length, message: '' };
 let dataCache = null;
@@ -1539,6 +1688,7 @@ async function runScan() {
       records = r.records || [];
       sessions = r.sessions || {};
       note = r.note || '';
+      foldSubagents(records, sessions);
       records.sort((a, b) => a.t - b.t);
     } catch (e) {
       error = String((e && e.message) || e);
@@ -1749,4 +1899,4 @@ if (process.send) process.once('disconnect', () => { server.close(); process.exi
 
 if (require.main === module) main().catch((e) => { console.error('启动失败:', e); process.exit(1); });
 
-module.exports = { runScan, AGENT_DEFS, scanClaudeUsage, codexSnapshotHandler, codexDeltas, selectCodexSessions, codexUserInputText, codexAgentTitle, dedupeMirageRecords, sessionMetaFromFiles, codexTitles, piSidOf, piUserInputText, resolveDshHome, decodeZstdFrames, parseDshSession, dshHarnessSessions };
+module.exports = { runScan, AGENT_DEFS, scanClaudeUsage, codexSnapshotHandler, codexDeltas, selectCodexSessions, codexUserInputText, codexAgentTitle, dedupeMirageRecords, sessionMetaFromFiles, codexTitles, piSidOf, piUserInputText, resolveDshHome, decodeZstdFrames, parseDshSession, dshHarnessSessions, migratePricing, DEFAULT_PRICING, foldSubagents, claudeSubagentId, ccLineHandler };
